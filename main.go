@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"fmt"
 	"image"
-	"image/color"
 	_ "image/png"
 	"log"
 	"math/rand"
@@ -21,7 +20,6 @@ import (
 	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/audio/wav"
 	"github.com/MattSwanson/ebiten/v2/ebitenutil"
-	"github.com/MattSwanson/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
@@ -101,6 +99,9 @@ type Game struct {
 	sounds       map[string]*audio.Player
 	showStatic   bool
 	staticLayer  static
+	gameRunning  bool
+	snakeGame    *Snake
+	currentInput ebiten.Key
 }
 
 type cmd struct {
@@ -127,18 +128,22 @@ func (g *Game) Update() error {
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(ebiten.KeyUp):
+			g.currentInput = ebiten.KeyUp
 			if g.sprites.num != 0 {
 				g.sprites.sprites[0].posY -= 4.0
 			}
 		case int(ebiten.KeyDown):
+			g.currentInput = ebiten.KeyDown
 			if g.sprites.num != 0 {
 				g.sprites.sprites[0].posY += 4.0
 			}
 		case int(ebiten.KeyLeft):
+			g.currentInput = ebiten.KeyLeft
 			if g.sprites.num != 0 {
 				g.sprites.sprites[0].posX -= 4.0
 			}
 		case int(ebiten.KeyRight):
+			g.currentInput = ebiten.KeyRight
 			if g.sprites.num != 0 {
 				g.sprites.sprites[0].posX += 4.0
 			}
@@ -169,27 +174,31 @@ func (g *Game) Update() error {
 		}
 	default:
 	}
+	if g.gameRunning {
+		g.snakeGame.Update(g.currentInput)
+		g.currentInput = 0
+	}
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
-	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		g.sprites.sprites[0].posY += 4.0
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		g.sprites.sprites[0].posY -= 4.0
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		g.sprites.sprites[0].posX -= 4.0
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		g.sprites.sprites[0].posX += 4.0
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyMinus) {
-		g.sprites.sprites[0].objScale -= 0.01
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyEqual) {
-		g.sprites.sprites[0].objScale += 0.01
-	}
+	// if ebiten.IsKeyPressed(ebiten.KeyDown) {
+	// 	// g.sprites.sprites[0].posY += 4.0
+	// }
+	// if ebiten.IsKeyPressed(ebiten.KeyUp) {
+	// 	// g.sprites.sprites[0].posY -= 4.0
+	// }
+	// if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+	// 	// g.sprites.sprites[0].posX -= 4.0
+	// }
+	// if ebiten.IsKeyPressed(ebiten.KeyRight) {
+	// 	g.sprites.sprites[0].posX += 4.0
+	// }
+	// if ebiten.IsKeyPressed(ebiten.KeyMinus) {
+	// 	g.sprites.sprites[0].objScale -= 0.01
+	// }
+	// if ebiten.IsKeyPressed(ebiten.KeyEqual) {
+	// 	g.sprites.sprites[0].objScale += 0.01
+	// }
 	for i := 0; i < g.sprites.num; i++ {
 		if err := g.sprites.sprites[i].Update(); err != nil {
 			return err
@@ -203,11 +212,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for i := 0; i < g.sprites.num; i++ {
 		g.sprites.sprites[i].Draw(screen)
 	}
+	if g.gameRunning {
+		g.snakeGame.Draw(screen)
+	}
 	if g.showStatic {
 		g.staticLayer.Draw(screen)
 	}
-	text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-	text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
+	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
+	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 	fps := fmt.Sprintf("FPS: %.2f", ebiten.CurrentFPS())
 	ebitenutil.DebugPrint(screen, fps)
 }
@@ -225,6 +237,8 @@ func main() {
 	ebiten.SetRunnableOnUnfocused(true)
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetInitFocused(false)
+	ebiten.SetWindowResizable(true)
+	ebiten.SetWindowPosition(0, 0)
 
 	ga.commChannel = make(chan cmd)
 	game := &ga
@@ -244,6 +258,8 @@ func main() {
 			go handleConnection(conn, c)
 		}
 	}(game.commChannel)
+	game.snakeGame = newSnake()
+	game.gameRunning = true
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
