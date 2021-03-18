@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/png"
 	"log"
 	"math/rand"
@@ -20,6 +21,7 @@ import (
 	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/audio/wav"
 	"github.com/MattSwanson/ebiten/v2/ebitenutil"
+	"github.com/MattSwanson/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
@@ -51,6 +53,10 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	ga.sounds["zap"], err = initSound(ga.audioContext, "Voltage.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// font init
 	bs, err := os.ReadFile("caskaydia.TTF")
@@ -71,6 +77,7 @@ func init() {
 		log.Fatal(err)
 	}
 
+	ga.marquee = &Marquee{speed: 3}
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0}
 	//startTime = time.Now()
@@ -102,6 +109,9 @@ type Game struct {
 	gameRunning  bool
 	snakeGame    *Snake
 	currentInput ebiten.Key
+	bigMouse     bool
+	bigMouseImg  *ebiten.Image
+	marquee      *Marquee
 }
 
 type cmd struct {
@@ -116,6 +126,9 @@ const (
 	SizeGopher
 	Quack
 	KillGophs
+	BigMouse
+	SnakeCmd
+	MarqueeCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -171,6 +184,17 @@ func (g *Game) Update() error {
 			} else {
 				g.quack(n)
 			}
+		case BigMouse:
+			g.bigMouse = key.arg == "true"
+		case SnakeCmd:
+			if key.arg == "start" && !g.gameRunning {
+				g.snakeGame.reset()
+				g.gameRunning = true
+			} else if key.arg == "stop" {
+				g.gameRunning = false
+			}
+		case MarqueeCmd:
+			g.marquee.setText(key.arg)
 		}
 	default:
 	}
@@ -181,24 +205,10 @@ func (g *Game) Update() error {
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
-	// if ebiten.IsKeyPressed(ebiten.KeyDown) {
-	// 	// g.sprites.sprites[0].posY += 4.0
-	// }
-	// if ebiten.IsKeyPressed(ebiten.KeyUp) {
-	// 	// g.sprites.sprites[0].posY -= 4.0
-	// }
-	// if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-	// 	// g.sprites.sprites[0].posX -= 4.0
-	// }
-	// if ebiten.IsKeyPressed(ebiten.KeyRight) {
-	// 	g.sprites.sprites[0].posX += 4.0
-	// }
-	// if ebiten.IsKeyPressed(ebiten.KeyMinus) {
-	// 	g.sprites.sprites[0].objScale -= 0.01
-	// }
-	// if ebiten.IsKeyPressed(ebiten.KeyEqual) {
-	// 	g.sprites.sprites[0].objScale += 0.01
-	// }
+	if g.marquee.on {
+		g.marquee.Update()
+	}
+
 	for i := 0; i < g.sprites.num; i++ {
 		if err := g.sprites.sprites[i].Update(); err != nil {
 			return err
@@ -209,17 +219,27 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	for i := 0; i < g.sprites.num; i++ {
-		g.sprites.sprites[i].Draw(screen)
+
+	if g.bigMouse {
+		cx, cy := ebiten.CursorPosition()
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(cx-(g.bigMouseImg.Bounds().Dx()/2)), float64(cy-(g.bigMouseImg.Bounds().Dy()/2)))
+		screen.DrawImage(g.bigMouseImg, op)
 	}
 	if g.gameRunning {
 		g.snakeGame.Draw(screen)
 	}
+	for i := 0; i < g.sprites.num; i++ {
+		g.sprites.sprites[i].Draw(screen)
+	}
 	if g.showStatic {
 		g.staticLayer.Draw(screen)
 	}
-	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
+	text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
+	text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
+
+	g.marquee.Draw(screen)
+
 	fps := fmt.Sprintf("FPS: %.2f", ebiten.CurrentFPS())
 	ebitenutil.DebugPrint(screen, fps)
 }
@@ -259,8 +279,7 @@ func main() {
 		}
 	}(game.commChannel)
 	game.snakeGame = newSnake()
-	game.gameRunning = true
-
+	game.bigMouseImg = sprites[2]
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
@@ -308,6 +327,21 @@ func handleConnection(conn net.Conn, c chan cmd) {
 			c <- cmd{Quack, fields[1]}
 		case "killgophs":
 			c <- cmd{KillGophs, ""}
+		case "bigmouse":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{BigMouse, fields[1]}
+		case "snake":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{SnakeCmd, fields[1]}
+		case "setmarquee":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{MarqueeCmd, strings.Join(fields[1:], " ")}
 		}
 		fmt.Println(fields)
 	}
@@ -333,6 +367,10 @@ func (g *Game) newGopher(n int) {
 }
 
 func (g *Game) destroyGophers() {
+	if g.sprites.num > 0 {
+		g.sounds["zap"].Rewind()
+		g.sounds["zap"].Play()
+	}
 	g.sprites.num = 0
 	g.sprites.sprites = make([]*Sprite, maxSprites)
 }
