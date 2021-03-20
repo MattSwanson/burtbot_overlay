@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"fmt"
 	"image"
-	"image/color"
 	_ "image/png"
 	"log"
 	"math/rand"
@@ -17,11 +16,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/games"
 	"github.com/MattSwanson/ebiten/v2"
 	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/audio/wav"
 	"github.com/MattSwanson/ebiten/v2/ebitenutil"
-	"github.com/MattSwanson/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
@@ -30,6 +29,10 @@ import (
 var ga Game
 var myFont font.Face
 
+const (
+	audioSampleRate = 44100
+)
+
 func init() {
 	var err error
 	//audio init
@@ -37,23 +40,31 @@ func init() {
 	ga.showStatic = false
 	ga.staticLayer = static{noiseImage: image.NewRGBA(image.Rect(0, 0, screenWidth, screenHeight))}
 	ga.sounds = map[string]*audio.Player{}
-	ga.sounds["eep"], err = initSound(ga.audioContext, "wildeep.wav")
+	ga.sounds["eep"], err = initSound(ga.audioContext, "sounds/wildeep.wav")
 	if err != nil {
 		log.Fatal(err)
 	}
-	ga.sounds["whit"], err = initSound(ga.audioContext, "Whit.wav")
+	ga.sounds["whit"], err = initSound(ga.audioContext, "sounds/Whit.wav")
 	if err != nil {
 		log.Fatal(err)
 	}
-	ga.sounds["boing"], err = initSound(ga.audioContext, "Boing.wav")
+	ga.sounds["boing"], err = initSound(ga.audioContext, "sounds/Boing.wav")
 	if err != nil {
 		log.Fatal(err)
 	}
-	ga.sounds["quack"], err = initSound(ga.audioContext, "Quack.wav")
+	ga.sounds["quack"], err = initSound(ga.audioContext, "sounds/Quack.wav")
 	if err != nil {
 		log.Fatal(err)
 	}
-	ga.sounds["zap"], err = initSound(ga.audioContext, "Voltage.wav")
+	ga.sounds["zap"], err = initSound(ga.audioContext, "sounds/Voltage.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ga.sounds["logjam"], err = initSound(ga.audioContext, "sounds/Logjam.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ga.sounds["bip"], err = initSound(ga.audioContext, "sounds/Bip.wav")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,7 +88,7 @@ func init() {
 		log.Fatal(err)
 	}
 
-	ga.marquee = &Marquee{speed: 3}
+	ga.marquee = NewMarquee(15)
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0}
 	//startTime = time.Now()
@@ -88,7 +99,7 @@ func initSound(ctx *audio.Context, fileName string) (*audio.Player, error) {
 	if err != nil {
 		return nil, err
 	}
-	ws, err := wav.Decode(ctx, file)
+	ws, err := wav.DecodeWithSampleRate(audioSampleRate, file)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +119,7 @@ type Game struct {
 	staticLayer  static
 	gameRunning  bool
 	snakeGame    *Snake
+	plinko       *games.Plinko
 	currentInput ebiten.Key
 	bigMouse     bool
 	bigMouseImg  *ebiten.Image
@@ -129,11 +141,24 @@ const (
 	BigMouse
 	SnakeCmd
 	MarqueeCmd
+	TTS
 
 	screenWidth  = 2560
 	screenHeight = 1440
 	maxSprites   = 100000
 )
+
+var connMessages = []string{
+	"burtbot circuits activated",
+	"burtboat circuits activated",
+	"birdbot circus activated",
+	"botbot crocus hacktivated",
+	"activated circuts, burtboot",
+	"botcuts burtivated accir",
+	"burtboot circuit city actioned",
+	"activated burtboat circumnavigation",
+	"borkbonk haircut motivated",
+}
 
 func (g *Game) Update() error {
 
@@ -194,7 +219,19 @@ func (g *Game) Update() error {
 				g.gameRunning = false
 			}
 		case MarqueeCmd:
+			if key.arg == "off" {
+				g.marquee.enable(false)
+				return nil
+			} else if key.arg == "embiggen" {
+				g.marquee.Embiggen()
+				return nil
+			} else if key.arg == "smol" {
+				g.marquee.Smol()
+				return nil
+			}
 			g.marquee.setText(key.arg)
+		case TTS:
+			go speak(g.audioContext, key.arg)
 		}
 	default:
 	}
@@ -202,6 +239,7 @@ func (g *Game) Update() error {
 		g.snakeGame.Update(g.currentInput)
 		g.currentInput = 0
 	}
+	g.plinko.Update()
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
@@ -235,8 +273,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.showStatic {
 		g.staticLayer.Draw(screen)
 	}
-	text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-	text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
+	g.plinko.Draw(screen)
+	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
+	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 
 	g.marquee.Draw(screen)
 
@@ -275,19 +314,28 @@ func main() {
 			if err != nil {
 				log.Println(err)
 			}
-			go handleConnection(conn, c)
+			go handleConnection(conn, c, game.audioContext)
 		}
 	}(game.commChannel)
+	game.plinko = games.LoadPlinko(screenWidth, screenHeight, game.sounds)
+	game.plinko.ReleaseBall()
 	game.snakeGame = newSnake()
 	game.bigMouseImg = sprites[2]
+	// _, err = getAvailableVoices()
+	// if err != nil {
+	// 	log.Println(err.Error())
+	// }
+	//fmt.Println(voices)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func handleConnection(conn net.Conn, c chan cmd) {
+func handleConnection(conn net.Conn, c chan cmd, actx *audio.Context) {
 	defer conn.Close()
 	fmt.Println("client connected")
+	msg := connMessages[rand.Intn(len(connMessages))]
+	go speak(actx, msg)
 	//fmt.Fprintf(conn, "Connected to overlay\n")
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
@@ -342,6 +390,11 @@ func handleConnection(conn net.Conn, c chan cmd) {
 				continue
 			}
 			c <- cmd{MarqueeCmd, strings.Join(fields[1:], " ")}
+		case "tts":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{TTS, strings.Join(fields[1:], " ")}
 		}
 		fmt.Println(fields)
 	}
@@ -368,8 +421,8 @@ func (g *Game) newGopher(n int) {
 
 func (g *Game) destroyGophers() {
 	if g.sprites.num > 0 {
-		g.sounds["zap"].Rewind()
-		g.sounds["zap"].Play()
+		g.sounds["logjam"].Rewind()
+		g.sounds["logjam"].Play()
 	}
 	g.sprites.num = 0
 	g.sprites.sprites = make([]*Sprite, maxSprites)
