@@ -27,19 +27,19 @@ type Sprites struct {
 func init() {
 	// load images
 	sprites = []*ebiten.Image{}
-	img, _, err := ebitenutil.NewImageFromFile("BLUE_GOPHER.png")
+	img, _, err := ebitenutil.NewImageFromFile("./images/BLUE_GOPHER.png")
 	if err != nil {
 		log.Fatal(err)
 	}
 	sprites = append(sprites, img)
 
-	img, _, err = ebitenutil.NewImageFromFile("green_goph.png")
+	img, _, err = ebitenutil.NewImageFromFile("./images/green_goph.png")
 	if err != nil {
 		log.Fatal(err)
 	}
 	sprites = append(sprites, img)
 
-	img, _, err = ebitenutil.NewImageFromFile("tux_goph.png")
+	img, _, err = ebitenutil.NewImageFromFile("./images/tux_goph.png")
 	if err != nil {
 		log.Fatal(err)
 	}
