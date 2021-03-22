@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"log"
+	"math/rand"
 	"os"
 
 	"github.com/MattSwanson/ebiten/v2"
@@ -22,13 +24,15 @@ const (
 
 type Marquee struct {
 	on          bool
-	speed       int
-	x           int
+	speed       float64
+	x           float64
 	y           int
 	yOffset     int
 	text        string
 	textBounds  image.Rectangle
+	color       color.RGBA
 	currentFont *font.Face
+	oneShot     bool
 }
 
 func init() {
@@ -62,8 +66,14 @@ func init() {
 	}
 }
 
-func NewMarquee(speed int) *Marquee {
-	return &Marquee{speed: speed, currentFont: &marqueeFont}
+func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
+	var currentFont *font.Face
+	if rand.Intn(100) < 10 {
+		currentFont = &marqueeFontXl
+	} else {
+		currentFont = &marqueeFont
+	}
+	return &Marquee{speed: speed, currentFont: currentFont, color: color, oneShot: oneShot}
 }
 
 func (m *Marquee) enable(b bool) {
@@ -73,23 +83,29 @@ func (m *Marquee) enable(b bool) {
 func (m *Marquee) setText(s string) {
 	m.text = s
 	m.textBounds = text.BoundString(*m.currentFont, s)
-	m.y = screenHeight - m.textBounds.Dy() + m.yOffset
+	// 0 to screenHeight - m.textBounds.Dy() + m.yOffset
+	m.y = rand.Intn(screenHeight-m.textBounds.Dy()) + m.textBounds.Dy()
+	m.color = color.RGBA{uint8(rand.Intn(255)), uint8(rand.Intn(255)), uint8(rand.Intn(255)), 0xff}
 	m.x = screenWidth
 	m.on = true
 }
 
-func (m *Marquee) Update() error {
-	m.x -= m.speed
-	if m.x+m.textBounds.Dx() < 0 {
-		m.x = screenWidth
+func (m *Marquee) Update(delta float64) error {
+	m.x -= m.speed * delta / 1000.0
+	if m.x+float64(m.textBounds.Dx()) < 0 {
+		if m.oneShot {
+			return errors.New("i'm done")
+		} else {
+			m.x = screenWidth
+		}
 	}
 	return nil
 }
 
 func (m *Marquee) Draw(screen *ebiten.Image) {
 	if m.on {
-		text.Draw(screen, m.text, *m.currentFont, m.x+1, m.y+1, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-		text.Draw(screen, m.text, *m.currentFont, m.x, m.y, color.RGBA{0, 0xFF, 0, 0xFF})
+		//text.Draw(screen, m.text, *m.currentFont, m.x+1, m.y+1, m.color)
+		text.Draw(screen, m.text, *m.currentFont, int(m.x), m.y, m.color)
 	}
 }
 
@@ -107,6 +123,6 @@ func (m *Marquee) Smol() {
 	m.setText(m.text)
 }
 
-func (m *Marquee) SetSpeed(speed int) {
+func (m *Marquee) SetSpeed(speed float64) {
 	m.speed = speed
 }
