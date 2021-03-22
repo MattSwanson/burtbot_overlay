@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/png"
 	"log"
 	"math/rand"
@@ -30,7 +31,8 @@ var ga Game
 var myFont font.Face
 
 const (
-	audioSampleRate = 44100
+	audioSampleRate         = 44100
+	soundVolume     float64 = 0.25
 )
 
 func init() {
@@ -88,9 +90,10 @@ func init() {
 		log.Fatal(err)
 	}
 
-	ga.marquee = NewMarquee(15)
+	ga.marquees = []*Marquee{}
 	xs := make([]*Sprite, maxSprites)
-	ga.sprites = Sprites{sprites: xs, num: 0}
+	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
+	ga.lastUpdate = time.Now()
 	//startTime = time.Now()
 }
 
@@ -107,23 +110,27 @@ func initSound(ctx *audio.Context, fileName string) (*audio.Player, error) {
 	if err != nil {
 		return nil, err
 	}
+	player.SetVolume(soundVolume)
 	return player, nil
 }
 
 type Game struct {
-	sprites      Sprites
-	commChannel  chan cmd
-	audioContext *audio.Context
-	sounds       map[string]*audio.Player
-	showStatic   bool
-	staticLayer  static
-	gameRunning  bool
-	snakeGame    *Snake
-	plinko       *games.Plinko
-	currentInput ebiten.Key
-	bigMouse     bool
-	bigMouseImg  *ebiten.Image
-	marquee      *Marquee
+	sprites         Sprites
+	commChannel     chan cmd
+	audioContext    *audio.Context
+	sounds          map[string]*audio.Player
+	showStatic      bool
+	staticLayer     static
+	gameRunning     bool
+	snakeGame       *Snake
+	plinko          *games.Plinko
+	plinkoRunning   bool
+	currentInput    ebiten.Key
+	bigMouse        bool
+	bigMouseImg     *ebiten.Image
+	marquees        []*Marquee
+	marqueesEnabled bool
+	lastUpdate      time.Time
 }
 
 type cmd struct {
@@ -141,7 +148,9 @@ const (
 	BigMouse
 	SnakeCmd
 	MarqueeCmd
+	SingleMarqueeCmd
 	TTS
+	PlinkoCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -154,14 +163,14 @@ var connMessages = []string{
 	"birdbot circus activated",
 	"botbot crocus hacktivated",
 	"activated circuts, burtboot",
-	"botcuts burtivated accir",
+	"botcuts burtivated dishwasher",
 	"burtboot circuit city actioned",
 	"activated burtboat circumnavigation",
 	"borkbonk haircut motivated",
 }
 
 func (g *Game) Update() error {
-
+	delta := float64(time.Since(g.lastUpdate).Milliseconds())
 	select {
 	case key := <-g.commChannel:
 		switch key.command {
@@ -220,18 +229,48 @@ func (g *Game) Update() error {
 			}
 		case MarqueeCmd:
 			if key.arg == "off" {
-				g.marquee.enable(false)
-				return nil
-			} else if key.arg == "embiggen" {
-				g.marquee.Embiggen()
-				return nil
-			} else if key.arg == "smol" {
-				g.marquee.Smol()
+				g.marqueesEnabled = false
+				g.marquees = []*Marquee{}
 				return nil
 			}
-			g.marquee.setText(key.arg)
+			// } else if key.arg == "embiggen" {
+			// 	g.marquee.Embiggen()
+			// 	return nil
+			// } else if key.arg == "smol" {
+			// 	g.marquee.Smol()
+			// 	return nil
+			// }
+			//g.marquee.setText(key.arg)
+			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
+			m.setText(key.arg)
+			g.marquees = append(g.marquees, m)
+			g.marqueesEnabled = true
+		case SingleMarqueeCmd:
+			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
+			m.setText(key.arg)
+			g.marquees = append(g.marquees, m)
+			g.marqueesEnabled = true
 		case TTS:
 			go speak(g.audioContext, key.arg)
+		case PlinkoCmd:
+			if key.arg == "start" && !g.plinkoRunning {
+				g.plinko.ResetGame()
+				g.plinkoRunning = true
+			}
+			if g.plinkoRunning {
+				if key.arg == "left" {
+					g.plinko.MoveDropPoint(-1)
+				}
+				if key.arg == "right" {
+					g.plinko.MoveDropPoint(1)
+				}
+				if key.arg == "drop" {
+					g.plinko.ReleaseBall()
+				}
+				if key.arg == "stop" {
+					g.plinkoRunning = false
+				}
+			}
 		}
 	default:
 	}
@@ -239,20 +278,28 @@ func (g *Game) Update() error {
 		g.snakeGame.Update(g.currentInput)
 		g.currentInput = 0
 	}
-	g.plinko.Update()
+	if g.plinkoRunning {
+		g.plinko.Update()
+	}
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
-	if g.marquee.on {
-		g.marquee.Update()
-	}
-
-	for i := 0; i < g.sprites.num; i++ {
-		if err := g.sprites.sprites[i].Update(); err != nil {
-			return err
+	if g.marqueesEnabled {
+		for i := 0; i < len(g.marquees); i++ {
+			if err := g.marquees[i].Update(delta); err != nil {
+				copy(g.marquees[i:], g.marquees[i+1:])
+				g.marquees[len(g.marquees)-1] = nil
+				g.marquees = g.marquees[:len(g.marquees)-1]
+			}
 		}
 	}
 
+	for i := 0; i < g.sprites.num; i++ {
+		if err := g.sprites.sprites[i].Update(delta); err != nil {
+			return err
+		}
+	}
+	g.lastUpdate = time.Now()
 	return nil
 }
 
@@ -273,11 +320,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.showStatic {
 		g.staticLayer.Draw(screen)
 	}
-	g.plinko.Draw(screen)
+	if g.plinkoRunning {
+		g.plinko.Draw(screen)
+	}
 	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 
-	g.marquee.Draw(screen)
+	if g.marqueesEnabled {
+		for i := 0; i < len(g.marquees); i++ {
+			g.marquees[i].Draw(screen)
+		}
+	}
 
 	fps := fmt.Sprintf("FPS: %.2f", ebiten.CurrentFPS())
 	ebitenutil.DebugPrint(screen, fps)
@@ -318,7 +371,7 @@ func main() {
 		}
 	}(game.commChannel)
 	game.plinko = games.LoadPlinko(screenWidth, screenHeight, game.sounds)
-	game.plinko.ReleaseBall()
+	//game.plinkoRunning = true
 	game.snakeGame = newSnake()
 	game.bigMouseImg = sprites[2]
 	// _, err = getAvailableVoices()
@@ -385,16 +438,25 @@ func handleConnection(conn net.Conn, c chan cmd, actx *audio.Context) {
 				continue
 			}
 			c <- cmd{SnakeCmd, fields[1]}
-		case "setmarquee":
-			if len(fields) < 2 {
+		case "marquee":
+			if len(fields) < 3 {
 				continue
 			}
-			c <- cmd{MarqueeCmd, strings.Join(fields[1:], " ")}
+			if fields[1] == "set" {
+				c <- cmd{MarqueeCmd, strings.Join(fields[2:], " ")}
+			} else if fields[1] == "once" {
+				c <- cmd{SingleMarqueeCmd, strings.Join(fields[2:], " ")}
+			}
 		case "tts":
 			if len(fields) < 2 {
 				continue
 			}
 			c <- cmd{TTS, strings.Join(fields[1:], " ")}
+		case "plinko":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{PlinkoCmd, fields[1]}
 		}
 		fmt.Println(fields)
 	}
