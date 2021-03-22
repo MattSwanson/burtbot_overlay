@@ -135,7 +135,7 @@ type Game struct {
 
 type cmd struct {
 	command int
-	arg     string
+	args    []string
 }
 
 const (
@@ -195,7 +195,7 @@ func (g *Game) Update() error {
 				g.sprites.sprites[0].posX += 4.0
 			}
 		case SpawnGopher:
-			if num, err := strconv.Atoi(key.arg); err != nil {
+			if num, err := strconv.Atoi(key.args[0]); err != nil {
 				return nil
 			} else {
 				g.newGopher(num)
@@ -205,7 +205,7 @@ func (g *Game) Update() error {
 		case ShowGopher:
 			g.showGopher()
 		case SizeGopher:
-			if size, err := strconv.ParseFloat(key.arg, 64); err != nil {
+			if size, err := strconv.ParseFloat(key.args[0], 64); err != nil {
 				return nil
 			} else {
 				g.setGopherSize(size)
@@ -213,61 +213,65 @@ func (g *Game) Update() error {
 		case KillGophs:
 			g.destroyGophers()
 		case Quack:
-			if n, err := strconv.Atoi(key.arg); err != nil {
+			if n, err := strconv.Atoi(key.args[0]); err != nil {
 				return nil
 			} else {
 				g.quack(n)
 			}
 		case BigMouse:
-			g.bigMouse = key.arg == "true"
+			g.bigMouse = key.args[0] == "true"
 		case SnakeCmd:
-			if key.arg == "start" && !g.gameRunning {
+			if key.args[0] == "start" && !g.gameRunning {
 				g.snakeGame.reset()
 				g.gameRunning = true
-			} else if key.arg == "stop" {
+			} else if key.args[0] == "stop" {
 				g.gameRunning = false
 			}
 		case MarqueeCmd:
-			if key.arg == "off" {
+			if key.args[0] == "off" {
 				g.marqueesEnabled = false
 				g.marquees = []*Marquee{}
 				return nil
 			}
-			// } else if key.arg == "embiggen" {
+			// } else if key.args[0] == "embiggen" {
 			// 	g.marquee.Embiggen()
 			// 	return nil
-			// } else if key.arg == "smol" {
+			// } else if key.args[0] == "smol" {
 			// 	g.marquee.Smol()
 			// 	return nil
 			// }
-			//g.marquee.setText(key.arg)
+			//g.marquee.setText(key.args[0])
 			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
-			m.setText(key.arg)
+			m.setText(key.args[0])
 			g.marquees = append(g.marquees, m)
 			g.marqueesEnabled = true
 		case SingleMarqueeCmd:
 			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
-			m.setText(key.arg)
+			m.setText(key.args[0])
 			g.marquees = append(g.marquees, m)
 			g.marqueesEnabled = true
 		case TTS:
-			go speak(g.audioContext, key.arg)
+			go speak(g.audioContext, key.args[0])
 		case PlinkoCmd:
-			if key.arg == "start" && !g.plinkoRunning {
+			if key.args[0] == "start" && !g.plinkoRunning {
+				// username := "unknown"
+				// if len(key.args) >= 2 {
+				// 	username = key.args[1]
+				// }
 				g.plinko.ResetGame()
 				g.plinkoRunning = true
 			}
 			if g.plinkoRunning {
-				if key.arg == "left" {
+				if key.args[0] == "left" {
 					g.plinko.MoveDropPoint(-1)
 				}
-				if key.arg == "right" {
+				if key.args[0] == "right" {
 					g.plinko.MoveDropPoint(1)
 				}
-				if key.arg == "drop" {
+				if key.args[0] == "drop" {
 					g.plinko.ReleaseBall()
 				}
-				if key.arg == "stop" {
+				if key.args[0] == "stop" {
 					g.plinkoRunning = false
 				}
 			}
@@ -399,64 +403,64 @@ func handleConnection(conn net.Conn, c chan cmd, actx *audio.Context) {
 		}
 		switch fields[0] {
 		case "up":
-			c <- cmd{int(ebiten.KeyUp), ""}
+			c <- cmd{int(ebiten.KeyUp), []string{}}
 		case "down":
-			c <- cmd{int(ebiten.KeyDown), ""}
+			c <- cmd{int(ebiten.KeyDown), []string{}}
 		case "left":
-			c <- cmd{int(ebiten.KeyLeft), ""}
+			c <- cmd{int(ebiten.KeyLeft), []string{}}
 		case "right":
-			c <- cmd{int(ebiten.KeyRight), ""}
+			c <- cmd{int(ebiten.KeyRight), []string{}}
 		case "spawngo":
 			arg := "1"
 			if len(fields) > 1 {
 				arg = fields[1]
 			}
-			c <- cmd{SpawnGopher, arg}
+			c <- cmd{SpawnGopher, []string{arg}}
 		case "hidego":
-			c <- cmd{HideGopher, ""}
+			c <- cmd{HideGopher, []string{}}
 		case "showgo":
-			c <- cmd{ShowGopher, ""}
+			c <- cmd{ShowGopher, []string{}}
 		case "sizego":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{SizeGopher, fields[1]}
+			c <- cmd{SizeGopher, fields[1:]}
 		case "quack":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{Quack, fields[1]}
+			c <- cmd{Quack, fields[1:]}
 		case "killgophs":
-			c <- cmd{KillGophs, ""}
+			c <- cmd{KillGophs, []string{}}
 		case "bigmouse":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{BigMouse, fields[1]}
+			c <- cmd{BigMouse, fields[1:]}
 		case "snake":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{SnakeCmd, fields[1]}
+			c <- cmd{SnakeCmd, fields[1:]}
 		case "marquee":
 			if len(fields) < 3 {
 				continue
 			}
 			if fields[1] == "set" {
-				c <- cmd{MarqueeCmd, strings.Join(fields[2:], " ")}
+				c <- cmd{MarqueeCmd, []string{strings.Join(fields[2:], " ")}}
 			} else if fields[1] == "once" {
-				c <- cmd{SingleMarqueeCmd, strings.Join(fields[2:], " ")}
+				c <- cmd{SingleMarqueeCmd, []string{strings.Join(fields[2:], " ")}}
 			}
 		case "tts":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{TTS, strings.Join(fields[1:], " ")}
+			c <- cmd{TTS, []string{strings.Join(fields[1:], " ")}}
 		case "plinko":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{PlinkoCmd, fields[1]}
+			c <- cmd{PlinkoCmd, fields[1:]}
 		}
 		fmt.Println(fields)
 	}
