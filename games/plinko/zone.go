@@ -1,9 +1,11 @@
 package plinko
 
 import (
+	"fmt"
 	"image/color"
 
 	"github.com/MattSwanson/ebiten/v2"
+	"github.com/MattSwanson/ebiten/v2/text"
 )
 
 type zone struct {
@@ -33,4 +35,5 @@ func (z *zone) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(z.x, z.y)
 	screen.DrawImage(z.img, op)
+	text.Draw(screen, fmt.Sprint(z.rewardValue), gameFont, int(z.x+z.w/2), int(z.y+z.h/2), color.RGBA{0x00, 0xff, 0x00, 0x55})
 }
