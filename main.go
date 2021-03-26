@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MattSwanson/burtbot_overlay/games"
+	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/ebiten/v2"
 	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/audio/wav"
@@ -117,13 +117,14 @@ func initSound(ctx *audio.Context, fileName string) (*audio.Player, error) {
 type Game struct {
 	sprites         Sprites
 	commChannel     chan cmd
+	connWriteChan   chan string
 	audioContext    *audio.Context
 	sounds          map[string]*audio.Player
 	showStatic      bool
 	staticLayer     static
 	gameRunning     bool
 	snakeGame       *Snake
-	plinko          *games.Plinko
+	plinko          *plinko.Core
 	plinkoRunning   bool
 	currentInput    ebiten.Key
 	bigMouse        bool
@@ -254,11 +255,11 @@ func (g *Game) Update() error {
 			go speak(g.audioContext, key.args[0])
 		case PlinkoCmd:
 			if key.args[0] == "start" && !g.plinkoRunning {
-				// username := "unknown"
-				// if len(key.args) >= 2 {
-				// 	username = key.args[1]
-				// }
-				g.plinko.ResetGame()
+				username := "unknown"
+				if len(key.args) >= 2 {
+					username = key.args[1]
+				}
+				g.plinko.ResetGame(username)
 				g.plinkoRunning = true
 			}
 			if g.plinkoRunning {
@@ -357,6 +358,7 @@ func main() {
 	ebiten.SetWindowPosition(0, 0)
 
 	ga.commChannel = make(chan cmd)
+	ga.connWriteChan = make(chan string)
 	game := &ga
 
 	ln, err := net.Listen("tcp", ":8081")
@@ -365,16 +367,16 @@ func main() {
 	}
 	defer ln.Close()
 
-	go func(c chan cmd) {
+	go func(c chan cmd, wc chan string) {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				log.Println(err)
 			}
-			go handleConnection(conn, c, game.audioContext)
+			go handleConnection(conn, c, wc, game.audioContext)
 		}
-	}(game.commChannel)
-	game.plinko = games.LoadPlinko(screenWidth, screenHeight, game.sounds)
+	}(game.commChannel, ga.connWriteChan)
+	game.plinko = plinko.Load(screenWidth, screenHeight, game.sounds, game.connWriteChan)
 	//game.plinkoRunning = true
 	game.snakeGame = newSnake()
 	game.bigMouseImg = sprites[2]
@@ -388,8 +390,11 @@ func main() {
 	}
 }
 
-func handleConnection(conn net.Conn, c chan cmd, actx *audio.Context) {
+func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Context) {
 	defer conn.Close()
+	go func() {
+		handleWrites(&conn, wc)
+	}()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
 	go speak(actx, msg)
@@ -463,6 +468,18 @@ func handleConnection(conn net.Conn, c chan cmd, actx *audio.Context) {
 			c <- cmd{PlinkoCmd, fields[1:]}
 		}
 		fmt.Println(fields)
+	}
+}
+
+func handleWrites(conn *net.Conn, wc chan string) {
+	for {
+		s := <-wc
+		n, err := fmt.Fprint(*conn, s)
+		if err != nil {
+			log.Println("couldn't write to connection: ", err.Error())
+			continue
+		}
+		log.Printf("wrote %d bytes to tcp connection", n)
 	}
 }
 
