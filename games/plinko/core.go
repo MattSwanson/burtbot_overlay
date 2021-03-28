@@ -26,17 +26,18 @@ const (
 )
 
 var gameFont font.Face
+var playerLabelFont font.Face
+var ballImg *ebiten.Image
 
 type Core struct {
 	lastUpdate       time.Time
-	ball             *ball
+	balls            []*ball
 	pegs             []*peg
 	boxes            []*box
 	goalZones        []*zone
 	sounds           map[string]*audio.Player
 	dropPoints       []fPoint
 	currentDropPoint int
-	username         string
 	rewardMultiplier int
 	writeChannel     chan string
 }
@@ -78,7 +79,17 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 	if err != nil {
 		log.Fatal(err)
 	}
-	ballImg, _, err := ebitenutil.NewImageFromFile("./images/plinko/blue_token.png")
+
+	playerLabelFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    24,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ballImg, _, err = ebitenutil.NewImageFromFile("./images/plinko/blue_token.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,17 +98,12 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 	for i := 0; i < 5; i++ {
 		dropPoints = append(dropPoints, fPoint{(screenWidth/2 - float64(ballImg.Bounds().Dx())) + (float64(i)-2)*300, 20.0})
 	}
-	b := ball{
-		mass:   5,
-		x:      dropPoints[2].x,
-		y:      dropPoints[2].y,
-		img:    ballImg,
-		radius: float64(ballImg.Bounds().Dx()) / 2.0,
-	}
+
+	balls := []*ball{}
 	boxes := generateBounds(screenWidth, screenHeight)
 	zones := generateGoalZones()
 	return &Core{
-		ball:             &b,
+		balls:            balls,
 		pegs:             pegs,
 		boxes:            boxes,
 		sounds:           sounds,
@@ -110,105 +116,123 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 
 func (c *Core) CheckForCollision() {
 
-	if !c.ball.falling {
-		return
-	}
-
 	const drain float64 = 0.95
-
-	// peg collisions
-	for _, peg := range c.pegs {
-		dx := c.ball.x - peg.x
-		dy := c.ball.y - peg.y
-		mag := math.Sqrt(dx*dx + dy*dy)
-		vmag := math.Sqrt(c.ball.vx*c.ball.vx + c.ball.vy*c.ball.vy)
-		if mag <= peg.radius+c.ball.radius {
-			c.ball.vx = (drain * vmag) * (dx / mag)
-			c.ball.vy = (drain * vmag) * (dy / mag)
-			// .05 -> .25
-			//c.sounds["bip"].SetVolume()
-			c.sounds["bip"].Rewind()
-			c.sounds["bip"].Play()
+	for idx, b := range c.balls {
+		if !b.falling {
+			continue
 		}
-	}
+		// peg collisions
+		for _, peg := range c.pegs {
+			dx := b.x - peg.x
+			dy := b.y - peg.y
+			mag := math.Sqrt(dx*dx + dy*dy)
+			vmag := math.Sqrt(b.vx*b.vx + b.vy*b.vy)
+			if mag <= peg.radius+b.radius {
+				b.vx = (drain * vmag) * (dx / mag)
+				b.vy = (drain * vmag) * (dy / mag)
+				// .05 -> .25
+				//c.sounds["bip"].SetVolume()
+				c.sounds["bip"].Rewind()
+				c.sounds["bip"].Play()
+			}
+		}
 
-	// boundary collisions
-	for _, box := range c.boxes {
-		dY := math.Abs((box.y + 0.5*box.h) - (c.ball.y + c.ball.radius))
-		dX := math.Abs((box.x + 0.5*box.w) - (c.ball.x + c.ball.radius))
-		if dY < 0.5*box.h+c.ball.radius && dX < box.w/2 {
-			c.ball.vy = -c.ball.vy * 0.6
-			c.ball.vx = c.ball.vx * 0.6
-			c.ball.y = box.y - 2.0*c.ball.radius
-			if math.Abs(c.ball.vy) > 25 {
+		// token collisions????
+		for otidx, ot := range c.balls {
+			if otidx == idx {
+				continue
+			}
+			dx := b.x - ot.x
+			dy := b.y - ot.y
+
+			// magnitude of the collsion vector
+			mag := math.Sqrt(dx*dx + dy*dy)
+
+			if mag <= ot.radius+b.radius {
+				// magnitude of this tokens velocity
+				vmag := math.Sqrt(b.vx*b.vx + b.vy*b.vy)
+
+				// magnitude of other tokens velocity
+				otvmag := math.Sqrt(ot.vx*ot.vx + ot.vy*ot.vy)
+
+				// total velocity of the collision -- masses are equal so no need to worky about that
+				totalVelocity := vmag + otvmag
+
+				b.vx = (drain * totalVelocity) / 2.0 * (dx / mag)
+				b.vy = (drain * totalVelocity) / 2.0 * (dy / mag)
+				ot.vx = (drain * totalVelocity) / 2.0 * (-1.0 * dx / mag)
+				ot.vy = (drain * totalVelocity) / 2.0 * (-1.0 * dy / mag)
 				c.sounds["boing"].Rewind()
 				c.sounds["boing"].Play()
 			}
-		} else if dX < c.ball.radius+0.5*box.w && dY < box.h/2-c.ball.radius {
-			c.ball.vx = -c.ball.vx * 0.6
-			if c.ball.vx > 0 {
-				c.ball.x = box.x + box.w
-			} else {
-				c.ball.x = box.x - 2.0*c.ball.radius
-			}
-			c.ball.vy = c.ball.vy * 0.6
-			if math.Abs(c.ball.vx) > 25 {
-				c.sounds["boing"].Rewind()
-				c.sounds["boing"].Play()
+		}
+
+		// boundary collisions
+		for _, box := range c.boxes {
+			dY := math.Abs((box.y + 0.5*box.h) - (b.y + b.radius))
+			dX := math.Abs((box.x + 0.5*box.w) - (b.x + b.radius))
+			if dY < 0.5*box.h+b.radius && dX < box.w/2 {
+				b.vy = -b.vy * 0.6
+				b.vx = b.vx * 0.6
+				b.y = box.y - 2.0*b.radius
+				if math.Abs(b.vy) > 25 {
+					c.sounds["boing"].Rewind()
+					c.sounds["boing"].Play()
+				}
+			} else if dX < b.radius+0.5*box.w && dY < box.h/2-b.radius {
+				b.vx = -b.vx * 0.6
+				if b.vx > 0 {
+					b.x = box.x + box.w
+				} else {
+					b.x = box.x - 2.0*b.radius
+				}
+				b.vy = b.vy * 0.6
+				if math.Abs(b.vx) > 25 {
+					c.sounds["boing"].Rewind()
+					c.sounds["boing"].Play()
+				}
 			}
 		}
-	}
 
-	// zone "collisions"
-	// all zones min y is 1225.0
-	if c.ball.y > 1225 {
-		for _, z := range c.goalZones {
-			if c.ball.x+c.ball.radius >= z.x && c.ball.x+c.ball.radius < z.x+z.w {
-				c.rewardMultiplier = z.rewardValue
-				break
+		// zone "collisions"
+		// all zones min y is 1225.0
+		if b.y > 1225 {
+			for _, z := range c.goalZones {
+				if b.x+b.radius >= z.x && b.x+b.radius < z.x+z.w {
+					c.rewardMultiplier = z.rewardValue
+					break
+				}
 			}
 		}
-	}
 
-	if c.ball.y > gameHeight+200 {
-		c.ball.falling = false
-		fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
-		c.writeChannel <- fmt.Sprintf("plinko result %d\n", c.rewardMultiplier)
+		if b.y > gameHeight+200 {
+			b.falling = false
+			fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
+			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, c.rewardMultiplier)
+			c.balls = removeBall(c.balls, idx)
+		}
 	}
 }
 
+func removeBall(s []*ball, i int) []*ball {
+	s[len(s)-1], s[i] = s[i], s[len(s)-1]
+	return s[:len(s)-1]
+}
+
 func (c *Core) Update() error {
-	if ebiten.IsKeyPressed(ebiten.KeyR) {
-		c.ResetGame(c.username)
-		return nil
+	delta := float64(time.Since(c.lastUpdate).Milliseconds())
+	for _, b := range c.balls {
+		b.Update(delta)
 	}
-	if ebiten.IsKeyPressed(ebiten.KeyLeft) && !c.ball.falling {
-		c.MoveDropPoint(c.currentDropPoint - 1)
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyRight) && !c.ball.falling {
-		c.MoveDropPoint(c.currentDropPoint + 1)
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyDown) && !c.ball.falling {
-		c.ReleaseBall()
-	}
-	c.ball.Update(float64(time.Since(c.lastUpdate).Milliseconds()))
 	c.CheckForCollision()
 	c.lastUpdate = time.Now()
 	return nil
 }
 
-func (c *Core) MoveDropPoint(direction int) {
-	if direction == -1 && c.currentDropPoint > 0 {
-		c.currentDropPoint--
-		c.ball.x, c.ball.y = c.dropPoints[c.currentDropPoint].x, c.dropPoints[c.currentDropPoint].y
-	} else if direction == 1 && c.currentDropPoint < len(c.dropPoints)-1 {
-		c.currentDropPoint++
-		c.ball.x, c.ball.y = c.dropPoints[c.currentDropPoint].x, c.dropPoints[c.currentDropPoint].y
-	}
-}
-
 func (c *Core) Draw(screen *ebiten.Image) {
-	c.ball.Draw(screen)
+	for _, v := range c.balls {
+		v.Draw(screen)
+	}
 	for _, v := range c.pegs {
 		v.Draw(screen)
 	}
@@ -218,24 +242,20 @@ func (c *Core) Draw(screen *ebiten.Image) {
 	for _, v := range c.goalZones {
 		v.Draw(screen)
 	}
-	text.Draw(screen, "Current Player: "+c.username, gameFont, 30, 50, color.RGBA{0x00, 0xff, 0x00, 0xff})
-	cx, cy := ebiten.CursorPosition()
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("cx: %d, cy: %d", cx, cy))
+	for k, v := range c.dropPoints {
+		text.Draw(screen, fmt.Sprint(k), gameFont, int(v.x), int(v.y)+35, color.RGBA{0x00, 0xff, 0x00, 0xff})
+	}
 }
 
-func (c *Core) ResetGame(username string) {
-	c.ball.falling = false
-	c.ball.vx = 0
-	c.ball.vy = 0
-	c.currentDropPoint = 2
-	c.ball.x = c.dropPoints[c.currentDropPoint].x
-	c.ball.y = c.dropPoints[c.currentDropPoint].y
-	c.username = username
-}
-
-func (c *Core) ReleaseBall() {
-	c.lastUpdate = time.Now()
-	c.ball.Release()
+func (c *Core) DropBall(pos int, playerName string) {
+	// make a new ball with its pos set to the selected drop point
+	if pos < 0 || pos > len(c.dropPoints) {
+		return // do nothing for now, but should return an error
+		// or is this validated on the other end? no
+	}
+	b := NewBall(playerName, ballImg, c.dropPoints[pos])
+	c.balls = append(c.balls, b)
+	b.Release()
 }
 
 func generateBounds(screenWidth, screenHeight float64) []*box {

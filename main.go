@@ -262,23 +262,32 @@ func (g *Game) Update() error {
 		case TTS:
 			go speak(g.audioContext, key.args[0])
 		case PlinkoCmd:
+			// !plinko start - this will start the game
+			// keep alive for 60 seconds with no drops
+			// each drop sets the keepalive back to 60?
+			// no other arguments used
 			if key.args[0] == "start" && !g.plinkoRunning {
-				username := "unknown"
-				if len(key.args) >= 2 {
-					username = key.args[1]
-				}
-				g.plinko.ResetGame(username)
 				g.plinkoRunning = true
 			}
 			if g.plinkoRunning {
-				if key.args[0] == "left" {
-					g.plinko.MoveDropPoint(-1)
-				}
-				if key.args[0] == "right" {
-					g.plinko.MoveDropPoint(1)
-				}
+				// !plinko drop n username
+				// drop a token at drop position n for the given username
 				if key.args[0] == "drop" {
-					g.plinko.ReleaseBall()
+					if len(key.args) < 3 {
+						return nil
+					}
+					// make sure we get an integer for drop position
+					n, err := strconv.Atoi(key.args[1])
+					if err != nil {
+						// for testing:
+						if key.args[1] == "all" {
+							for i := 0; i < 5; i++ {
+								g.plinko.DropBall(i, key.args[2])
+							}
+						}
+						return nil
+					}
+					g.plinko.DropBall(n, key.args[2])
 				}
 				if key.args[0] == "stop" {
 					g.plinkoRunning = false
@@ -345,7 +354,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 	}
 
-	fps := fmt.Sprintf("FPS: %.2f", ebiten.CurrentFPS())
+	fps := fmt.Sprintf("FPS: %.2f TPS: %.2f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
 	ebitenutil.DebugPrint(screen, fps)
 }
 
