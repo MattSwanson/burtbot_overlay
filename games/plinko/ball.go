@@ -25,7 +25,6 @@ type ball struct {
 }
 
 func NewBall(playerName string, img *ebiten.Image, pos fPoint) *ball {
-	//textBounds := text.BoundString(playerLabelFont, playerName)
 	radius := float64(img.Bounds().Dx()) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	return &ball{

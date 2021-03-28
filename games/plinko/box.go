@@ -7,12 +7,11 @@ import (
 )
 
 type box struct {
-	x        float64
-	y        float64
-	w        float64
-	h        float64
-	friction float64
-	img      *ebiten.Image
+	x   float64
+	y   float64
+	w   float64
+	h   float64
+	img *ebiten.Image
 }
 
 func NewBox(bounds fRect, color color.RGBA) *box {
