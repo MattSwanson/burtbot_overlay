@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	ballMass = 5
+	tokenMass = 5
 )
 
-type ball struct {
+type token struct {
 	falling     bool
 	mass        int
 	x           float64
@@ -24,11 +24,11 @@ type ball struct {
 	labelOffset fPoint
 }
 
-func NewBall(playerName string, img *ebiten.Image, pos fPoint) *ball {
+func NewBall(playerName string, img *ebiten.Image, pos fPoint) *token {
 	radius := float64(img.Bounds().Dx()) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
-	return &ball{
-		mass:        ballMass,
+	return &token{
+		mass:        tokenMass,
 		x:           pos.x,
 		y:           pos.y,
 		img:         img,
@@ -38,7 +38,7 @@ func NewBall(playerName string, img *ebiten.Image, pos fPoint) *ball {
 	}
 }
 
-func (b *ball) Update(delta float64) {
+func (b *token) Update(delta float64) {
 	if delta == 0 {
 		return
 	}
@@ -49,21 +49,21 @@ func (b *ball) Update(delta float64) {
 	}
 }
 
-func (b *ball) Draw(screen *ebiten.Image) {
+func (b *token) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(b.x, b.y)
 	screen.DrawImage(b.img, op)
 	text.Draw(screen, b.playerName, playerLabelFont, int(b.x+b.labelOffset.x), int(b.y+b.labelOffset.y), color.RGBA{0x00, 0xff, 0x00, 0xff})
 }
 
-func (b *ball) Release() {
+func (b *token) Release() {
 	b.falling = true
 }
 
-func (b *ball) SetVelocity(vx, vy float64) {
+func (b *token) SetVelocity(vx, vy float64) {
 	b.vx, b.vy = vx, vy
 }
 
-func (b *ball) SetPosition(x, y float64) {
+func (b *token) SetPosition(x, y float64) {
 	b.x, b.y = x, y
 }

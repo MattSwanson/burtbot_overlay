@@ -27,11 +27,11 @@ const (
 
 var gameFont font.Face
 var playerLabelFont font.Face
-var ballImg *ebiten.Image
+var tokenImg *ebiten.Image
 
 type Core struct {
 	lastUpdate       time.Time
-	balls            []*ball
+	tokens           []*token
 	pegs             []*peg
 	boxes            []*box
 	goalZones        []*zone
@@ -89,21 +89,21 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 		log.Fatal(err)
 	}
 
-	ballImg, _, err = ebitenutil.NewImageFromFile("./images/plinko/blue_token.png")
+	tokenImg, _, err = ebitenutil.NewImageFromFile("./images/plinko/blue_token.png")
 	if err != nil {
 		log.Fatal(err)
 	}
 	pegs := generatePegs(screenWidth, screenHeight)
 	dropPoints := []fPoint{}
 	for i := 0; i < 5; i++ {
-		dropPoints = append(dropPoints, fPoint{(screenWidth/2 - float64(ballImg.Bounds().Dx())) + (float64(i)-2)*300, 20.0})
+		dropPoints = append(dropPoints, fPoint{(screenWidth/2 - float64(tokenImg.Bounds().Dx())) + (float64(i)-2)*300, 20.0})
 	}
 
-	balls := []*ball{}
+	tokens := []*token{}
 	boxes := generateBounds(screenWidth, screenHeight)
 	zones := generateGoalZones()
 	return &Core{
-		balls:            balls,
+		tokens:           tokens,
 		pegs:             pegs,
 		boxes:            boxes,
 		sounds:           sounds,
@@ -117,7 +117,7 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 func (c *Core) CheckForCollision() {
 
 	const drain float64 = 0.95
-	for idx, b := range c.balls {
+	for idx, b := range c.tokens {
 		if !b.falling {
 			continue
 		}
@@ -132,13 +132,13 @@ func (c *Core) CheckForCollision() {
 				b.vy = (drain * vmag) * (dy / mag)
 				// .05 -> .25
 				//c.sounds["bip"].SetVolume()
-				c.sounds["bip"].Rewind()
-				c.sounds["bip"].Play()
+				//c.sounds["bip"].Rewind()
+				//c.sounds["bip"].Play()
 			}
 		}
 
 		// token collisions????
-		for otidx, ot := range c.balls {
+		for otidx, ot := range c.tokens {
 			if otidx == idx {
 				continue
 			}
@@ -209,19 +209,19 @@ func (c *Core) CheckForCollision() {
 			b.falling = false
 			fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, c.rewardMultiplier)
-			c.balls = removeBall(c.balls, idx)
+			c.tokens = removeBall(c.tokens, idx)
 		}
 	}
 }
 
-func removeBall(s []*ball, i int) []*ball {
+func removeBall(s []*token, i int) []*token {
 	s[len(s)-1], s[i] = s[i], s[len(s)-1]
 	return s[:len(s)-1]
 }
 
 func (c *Core) Update() error {
 	delta := float64(time.Since(c.lastUpdate).Milliseconds())
-	for _, b := range c.balls {
+	for _, b := range c.tokens {
 		b.Update(delta)
 	}
 	c.CheckForCollision()
@@ -230,7 +230,7 @@ func (c *Core) Update() error {
 }
 
 func (c *Core) Draw(screen *ebiten.Image) {
-	for _, v := range c.balls {
+	for _, v := range c.tokens {
 		v.Draw(screen)
 	}
 	for _, v := range c.pegs {
@@ -248,13 +248,13 @@ func (c *Core) Draw(screen *ebiten.Image) {
 }
 
 func (c *Core) DropBall(pos int, playerName string) {
-	// make a new ball with its pos set to the selected drop point
+	// make a new token with its pos set to the selected drop point
 	if pos < 0 || pos > len(c.dropPoints) {
 		return // do nothing for now, but should return an error
 		// or is this validated on the other end? no
 	}
-	b := NewBall(playerName, ballImg, c.dropPoints[pos])
-	c.balls = append(c.balls, b)
+	b := NewBall(playerName, tokenImg, c.dropPoints[pos])
+	c.tokens = append(c.tokens, b)
 	b.Release()
 }
 
@@ -282,7 +282,7 @@ func generateBounds(screenWidth, screenHeight float64) []*box {
 }
 
 func generatePegs(screenWidth, screenHeight float64) []*peg {
-	pegImg, _, err := ebitenutil.NewImageFromFile("./images/plinko/ball.png")
+	pegImg, _, err := ebitenutil.NewImageFromFile("./images/plinko/token.png")
 	if err != nil {
 		log.Fatal(err)
 	}
