@@ -7,15 +7,17 @@ import (
 	"time"
 
 	"github.com/MattSwanson/ebiten/v2"
+	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/ebitenutil"
 	"github.com/MattSwanson/ebiten/v2/inpututil"
 	"github.com/MattSwanson/ebiten/v2/text"
 )
 
 const (
-	gridSize     = 30
-	xNumInScreen = screenWidth / gridSize
-	yNumInScreen = screenHeight / gridSize
+	gridSize         = 30
+	xNumInScreen     = screenWidth / gridSize
+	yNumInScreen     = screenHeight / gridSize
+	initialMoveSpeed = 35
 )
 
 const (
@@ -33,6 +35,7 @@ type Position struct {
 
 type Snake struct {
 	moveDirection int
+	nextMove      int
 	snakeBody     []Position
 	apple         Position
 	timer         int
@@ -40,17 +43,19 @@ type Snake struct {
 	score         int
 	bestScore     int
 	level         int
+	sounds        map[string]*audio.Player
 }
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func newSnake() *Snake {
+func newSnake(sounds map[string]*audio.Player) *Snake {
 	s := &Snake{
 		apple:     Position{X: gridSize, Y: gridSize},
-		moveTime:  7,
+		moveTime:  initialMoveSpeed,
 		snakeBody: make([]Position, 1),
+		sounds:    sounds,
 	}
 	s.snakeBody[0].X = xNumInScreen / 2
 	s.snakeBody[0].Y = yNumInScreen / 2
@@ -72,12 +77,12 @@ func (s *Snake) collidesWithSelf() bool {
 	return false
 }
 
-func (s *Snake) collidesWithWall() bool {
-	return s.snakeBody[0].X < 0 ||
-		s.snakeBody[0].Y < 0 ||
-		s.snakeBody[0].X >= xNumInScreen ||
-		s.snakeBody[0].Y >= yNumInScreen
-}
+// func (s *Snake) collidesWithWall() bool {
+// 	return s.snakeBody[0].X < 0 ||
+// 		s.snakeBody[0].Y < 0 ||
+// 		s.snakeBody[0].X >= xNumInScreen ||
+// 		s.snakeBody[0].Y >= yNumInScreen
+// }
 
 func (s *Snake) needsToMoveSnake() bool {
 	return s.timer%s.moveTime == 0
@@ -86,7 +91,7 @@ func (s *Snake) needsToMoveSnake() bool {
 func (s *Snake) reset() {
 	s.apple.X = gridSize
 	s.apple.Y = gridSize
-	s.moveTime = 7
+	s.moveTime = initialMoveSpeed
 	s.snakeBody = s.snakeBody[:1]
 	s.snakeBody[0].X = xNumInScreen / 2
 	s.snakeBody[0].Y = yNumInScreen / 2
@@ -97,31 +102,37 @@ func (s *Snake) reset() {
 
 func (s *Snake) Update(currentInput ebiten.Key) error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyLeft) || currentInput == ebiten.KeyLeft {
-		if s.moveDirection != dirRight {
-			s.moveDirection = dirLeft
-		}
+		s.nextMove = dirLeft
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyRight) || currentInput == ebiten.KeyRight {
-		if s.moveDirection != dirLeft {
-			s.moveDirection = dirRight
-		}
+		s.nextMove = dirRight
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyDown) || currentInput == ebiten.KeyDown {
-		if s.moveDirection != dirUp {
-			s.moveDirection = dirDown
-		}
+		s.nextMove = dirDown
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyUp) || currentInput == ebiten.KeyUp {
-		if s.moveDirection != dirDown {
-			s.moveDirection = dirUp
-		}
+		s.nextMove = dirUp
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		s.reset()
 	}
 
 	if s.needsToMoveSnake() {
-		if s.collidesWithWall() || s.collidesWithSelf() {
+		if s.nextMove == dirDown && s.moveDirection != dirUp {
+			s.moveDirection = s.nextMove
+		} else if s.nextMove == dirUp && s.moveDirection != dirDown {
+			s.moveDirection = s.nextMove
+		} else if s.nextMove == dirLeft && s.moveDirection != dirRight {
+			s.moveDirection = s.nextMove
+		} else if s.nextMove == dirRight && s.moveDirection != dirLeft {
+			s.moveDirection = s.nextMove
+		}
+
+		if s.collidesWithSelf() {
+			s.sounds["zap"].Rewind()
+			s.sounds["zap"].Play()
 			s.reset()
 		}
 
 		if s.collidesWithApple() {
+			s.sounds["squeek"].Rewind()
+			s.sounds["squeek"].Play()
 			s.apple.X = rand.Intn(xNumInScreen - 1)
 			s.apple.Y = rand.Intn(yNumInScreen - 1)
 			s.snakeBody = append(s.snakeBody, Position{
@@ -130,10 +141,10 @@ func (s *Snake) Update(currentInput ebiten.Key) error {
 			})
 			if len(s.snakeBody) > 10 && len(s.snakeBody) < 20 {
 				s.level = 2
-				s.moveTime = 5
+				s.moveTime = initialMoveSpeed - 5
 			} else if len(s.snakeBody) > 20 {
 				s.level = 3
-				s.moveTime = 4
+				s.moveTime = initialMoveSpeed - 10
 			} else {
 				s.level = 1
 			}
@@ -150,12 +161,18 @@ func (s *Snake) Update(currentInput ebiten.Key) error {
 		switch s.moveDirection {
 		case dirLeft:
 			s.snakeBody[0].X--
+			if s.snakeBody[0].X < 0 {
+				s.snakeBody[0].X = xNumInScreen - 1
+			}
 		case dirRight:
-			s.snakeBody[0].X++
+			s.snakeBody[0].X = (s.snakeBody[0].X + 1) % xNumInScreen
 		case dirDown:
-			s.snakeBody[0].Y++
+			s.snakeBody[0].Y = (s.snakeBody[0].Y + 1) % yNumInScreen
 		case dirUp:
 			s.snakeBody[0].Y--
+			if s.snakeBody[0].Y < 0 {
+				s.snakeBody[0].Y = yNumInScreen - 1
+			}
 		}
 	}
 
@@ -182,5 +199,8 @@ func (s *Snake) Draw(screen *ebiten.Image) {
 		text.Draw(screen, s, myFont, 25, 25, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 		text.Draw(screen, s, myFont, 25, 25, color.RGBA{0, 0xFF, 0, 0xFF})
 	}
+}
 
+func (s *Snake) SetGameSpeed(speed int) {
+	s.moveTime = speed
 }

@@ -70,6 +70,10 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	ga.sounds["squeek"], err = initSound(ga.audioContext, "sounds/ChuToy.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// font init
 	bs, err := os.ReadFile("caskaydia.TTF")
@@ -227,6 +231,10 @@ func (g *Game) Update() error {
 				g.gameRunning = true
 			} else if key.args[0] == "stop" {
 				g.gameRunning = false
+			} else if key.args[0] == "speed" && len(key.args) > 1 {
+				if n, err := strconv.Atoi(key.args[1]); err == nil {
+					g.snakeGame.SetGameSpeed(n)
+				}
 			}
 		case MarqueeCmd:
 			if key.args[0] == "off" {
@@ -378,7 +386,7 @@ func main() {
 	}(game.commChannel, ga.connWriteChan)
 	game.plinko = plinko.Load(screenWidth, screenHeight, game.sounds, game.connWriteChan)
 	//game.plinkoRunning = true
-	game.snakeGame = newSnake()
+	game.snakeGame = newSnake(game.sounds)
 	game.bigMouseImg = sprites[2]
 	// _, err = getAvailableVoices()
 	// if err != nil {
