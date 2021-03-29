@@ -24,7 +24,7 @@ type token struct {
 	labelOffset fPoint
 }
 
-func NewBall(playerName string, img *ebiten.Image, pos fPoint) *token {
+func NewToken(playerName string, img *ebiten.Image, pos fPoint) *token {
 	radius := float64(img.Bounds().Dx()) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	return &token{
@@ -50,6 +50,9 @@ func (b *token) Update(delta float64) {
 }
 
 func (b *token) Draw(screen *ebiten.Image) {
+	if !b.falling {
+		return
+	}
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(b.x, b.y)
 	screen.DrawImage(b.img, op)

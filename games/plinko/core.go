@@ -1,6 +1,8 @@
 package plinko
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"image/color"
 	"log"
@@ -28,18 +30,21 @@ const (
 var gameFont font.Face
 var playerLabelFont font.Face
 var tokenImg *ebiten.Image
+var timerChannel chan bool
 
 type Core struct {
-	lastUpdate       time.Time
-	tokens           []*token
-	pegs             []*peg
-	boxes            []*box
-	goalZones        []*zone
-	sounds           map[string]*audio.Player
-	dropPoints       []fPoint
+	lastUpdate time.Time
+	tokens     []*token
+	pegs       []*peg
+	boxes      []*box
+	goalZones  []*zone
+	queues     []tokenQueue
+	sounds     map[string]*audio.Player
+	//	dropPoints       []fPoint
 	currentDropPoint int
 	rewardMultiplier int
 	writeChannel     chan string
+	CancelTimer      context.CancelFunc
 }
 
 type fPoint struct {
@@ -60,7 +65,32 @@ func (r *fRect) Dy() float64 {
 	return r.max.y - r.min.y
 }
 
+type tokenQueue struct {
+	Tokens       []*token
+	dropPosition fPoint
+}
+
+// push the token to the back of the queue
+func (tq *tokenQueue) push(t *token) {
+	tq.Tokens = append(tq.Tokens, t)
+}
+
+// pop the front element from the front of the queue
+func (tq *tokenQueue) pop() (*token, error) {
+	if len(tq.Tokens) == 0 {
+		return nil, errors.New("nothing in queue")
+	}
+	t := tq.Tokens[0]
+	if len(tq.Tokens) == 1 {
+		tq.Tokens = []*token{}
+	} else {
+		tq.Tokens = tq.Tokens[1:]
+	}
+	return t, nil
+}
+
 func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc chan string) *Core {
+	timerChannel = make(chan bool)
 	bs, err := os.ReadFile("caskaydia.TTF")
 	if err != nil {
 		log.Fatal(err)
@@ -94,24 +124,34 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 		log.Fatal(err)
 	}
 	pegs := generatePegs(screenWidth, screenHeight)
-	dropPoints := []fPoint{}
+	//dropPoints := []fPoint{}
+	tokenQueues := make([]tokenQueue, 5)
 	for i := 0; i < 5; i++ {
-		dropPoints = append(dropPoints, fPoint{(screenWidth/2 - float64(tokenImg.Bounds().Dx())) + (float64(i)-2)*300, 20.0})
+		dropPoint := fPoint{(screenWidth/2 - float64(tokenImg.Bounds().Dx())) + (float64(i)-2)*300, 20.0}
+		tq := tokenQueue{
+			Tokens:       []*token{},
+			dropPosition: dropPoint,
+		}
+		tokenQueues[i] = tq
 	}
 
 	tokens := []*token{}
 	boxes := generateBounds(screenWidth, screenHeight)
 	zones := generateGoalZones()
-	return &Core{
+
+	c := Core{
 		tokens:           tokens,
 		pegs:             pegs,
 		boxes:            boxes,
 		sounds:           sounds,
 		currentDropPoint: 2,
-		dropPoints:       dropPoints,
-		goalZones:        zones,
-		writeChannel:     wc,
+		queues:           tokenQueues,
+		//dropPoints:       dropPoints,
+		goalZones:    zones,
+		writeChannel: wc,
 	}
+	c.CancelTimer = manageQueues()
+	return &c
 }
 
 func (c *Core) CheckForCollision() {
@@ -220,12 +260,28 @@ func removeBall(s []*token, i int) []*token {
 }
 
 func (c *Core) Update() error {
+	select {
+	case <-timerChannel:
+		for i := 0; i < len(c.queues); i++ {
+			t, err := c.queues[i].pop()
+			if err != nil {
+				continue
+			}
+			c.tokens = append(c.tokens, t)
+			t.SetPosition(c.queues[i].dropPosition.x, c.queues[i].dropPosition.y)
+			t.Release()
+		}
+	default:
+	}
+
 	delta := float64(time.Since(c.lastUpdate).Milliseconds())
+
 	for _, b := range c.tokens {
 		b.Update(delta)
 	}
 	c.CheckForCollision()
 	c.lastUpdate = time.Now()
+
 	return nil
 }
 
@@ -242,20 +298,36 @@ func (c *Core) Draw(screen *ebiten.Image) {
 	for _, v := range c.goalZones {
 		v.Draw(screen)
 	}
-	for k, v := range c.dropPoints {
-		text.Draw(screen, fmt.Sprint(k), gameFont, int(v.x), int(v.y)+35, color.RGBA{0x00, 0xff, 0x00, 0xff})
+	for k, v := range c.queues {
+		text.Draw(screen, fmt.Sprint(k), gameFont, int(v.dropPosition.x), int(v.dropPosition.y)+35, color.RGBA{0x00, 0xff, 0x00, 0xff})
 	}
 }
 
 func (c *Core) DropBall(pos int, playerName string) {
 	// make a new token with its pos set to the selected drop point
-	if pos < 0 || pos > len(c.dropPoints) {
+	if pos < 0 || pos > len(c.queues) {
 		return // do nothing for now, but should return an error
 		// or is this validated on the other end? no
 	}
-	b := NewBall(playerName, tokenImg, c.dropPoints[pos])
-	c.tokens = append(c.tokens, b)
-	b.Release()
+	t := NewToken(playerName, tokenImg, c.queues[pos].dropPosition)
+	c.queues[pos].push(t)
+}
+
+func manageQueues() context.CancelFunc {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				timerChannel <- true
+			}
+		}
+	}(ctx)
+	return cancel
 }
 
 func generateBounds(screenWidth, screenHeight float64) []*box {

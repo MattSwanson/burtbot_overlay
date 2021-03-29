@@ -394,6 +394,7 @@ func main() {
 		}
 	}(game.commChannel, ga.connWriteChan)
 	game.plinko = plinko.Load(screenWidth, screenHeight, game.sounds, game.connWriteChan)
+	defer game.plinko.CancelTimer()
 	//game.plinkoRunning = true
 	game.snakeGame = newSnake(game.sounds)
 	game.bigMouseImg = sprites[2]
