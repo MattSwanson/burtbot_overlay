@@ -2,6 +2,7 @@ package plinko
 
 import (
 	"image/color"
+	"math/rand"
 
 	"github.com/MattSwanson/ebiten/v2"
 	"github.com/MattSwanson/ebiten/v2/text"
@@ -60,6 +61,8 @@ func (b *token) Draw(screen *ebiten.Image) {
 }
 
 func (b *token) Release() {
+	r := rand.Float64()
+	b.vx = (r - 0.5) * 3.0
 	b.falling = true
 }
 
