@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
+	"github.com/MattSwanson/burtbot_overlay/games/tanks"
 	"github.com/MattSwanson/ebiten/v2"
 	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/audio/wav"
@@ -130,6 +131,8 @@ type Game struct {
 	snakeGame       *Snake
 	plinko          *plinko.Core
 	plinkoRunning   bool
+	tanks           *tanks.Core
+	tanksRunning    bool
 	currentInput    ebiten.Key
 	bigMouse        bool
 	bigMouseImg     *ebiten.Image
@@ -345,6 +348,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.plinkoRunning {
 		g.plinko.Draw(screen)
 	}
+	if g.tanksRunning {
+		g.tanks.Draw(screen)
+	}
 	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 
@@ -398,11 +404,15 @@ func main() {
 	//game.plinkoRunning = true
 	game.snakeGame = newSnake(game.sounds)
 	game.bigMouseImg = sprites[2]
+	game.tanks = tanks.Load(screenWidth, screenHeight)
+	game.tanksRunning = true
 	// _, err = getAvailableVoices()
 	// if err != nil {
 	// 	log.Println(err.Error())
 	// }
 	//fmt.Println(voices)
+	//hm := tanks.GenerateHeightmap()
+	//fmt.Println(hm)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}

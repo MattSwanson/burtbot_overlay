@@ -7,6 +7,7 @@ require (
 	github.com/MattSwanson/ebiten/v2 v2.0.7
 	github.com/golang/protobuf v1.5.1 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.1 // indirect
+	github.com/ojrac/opensimplex-go v1.0.2 // indirect
 	golang.org/x/image v0.0.0-20210220032944-ac19c3e999fb
 	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4 // indirect
 	golang.org/x/sys v0.0.0-20210317225723-c4fcb01b228e // indirect
