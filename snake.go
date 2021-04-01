@@ -202,5 +202,8 @@ func (s *Snake) Draw(screen *ebiten.Image) {
 }
 
 func (s *Snake) SetGameSpeed(speed int) {
+	if speed <= 0 {
+		return
+	}
 	s.moveTime = speed
 }
