@@ -22,6 +22,7 @@ import (
 
 var marqueeFont font.Face
 var marqueeFontXl font.Face
+var emoteCache map[string]*ebiten.Image
 
 const (
 	xlYOffset  = screenHeight / 2
@@ -222,8 +223,12 @@ func (m *Marquee) SetSpeed(speed float64) {
 }
 
 func getImageFromCDN(id string) (*ebiten.Image, error) {
-	url := fmt.Sprintf("http://static-cdn.jtvnw.net/emoticons/v1/%s/3.0", id)
+	// check cache first
+	if img, ok := emoteCache[id]; ok {
+		return img, nil
+	}
 
+	url := fmt.Sprintf("http://static-cdn.jtvnw.net/emoticons/v1/%s/3.0", id)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -234,5 +239,6 @@ func getImageFromCDN(id string) (*ebiten.Image, error) {
 		return nil, err
 	}
 
-	return ebiten.NewImageFromImage(img), nil
+	emoteCache[id] = ebiten.NewImageFromImage(img)
+	return emoteCache[id], nil
 }
