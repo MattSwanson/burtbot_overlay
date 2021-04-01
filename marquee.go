@@ -99,6 +99,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	emoteCache = make(map[string]*ebiten.Image)
 }
 
 func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
