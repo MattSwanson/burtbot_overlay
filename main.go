@@ -476,6 +476,9 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Con
 			}
 			c <- cmd{SnakeCmd, fields[1:]}
 		case "marquee":
+			if fields[1] == "off" {
+				c <- cmd{MarqueeCmd, []string{"off"}}
+			}
 			if len(fields) < 3 {
 				continue
 			}
