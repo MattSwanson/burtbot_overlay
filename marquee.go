@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -32,28 +33,41 @@ type marqueeMsg struct {
 	Emotes     string `json:"emotes"`
 }
 
-type emoteInfo struct {
-	indices []emoteIndex
-	img     *ebiten.Image
-}
+// type emoteInfo struct {
+// 	indices []emoteIndex
+// 	img     *ebiten.Image
+// }
+
 type emoteIndex struct {
 	start int
 	end   int
+	img   *ebiten.Image
 }
+
+type emoteIndices []emoteIndex
+
+func (e emoteIndices) Len() int           { return len(e) }
+func (e emoteIndices) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
+func (e emoteIndices) Less(i, j int) bool { return e[i].start < e[j].start }
 
 type Marquee struct {
 	on          bool
 	speed       float64
 	x           float64
-	y           int
-	yOffset     int
+	y           float64
 	text        string
+	totalWidth  int
 	textBounds  image.Rectangle
 	color       color.RGBA
 	currentFont *font.Face
 	oneShot     bool
-	emotes      map[string]emoteInfo
+	//emotes      map[string]emoteInfo
+	//image    *ebiten.Image
+	sequence sequence
+	xOffsets []float64
 }
+
+type sequence []interface{}
 
 func init() {
 	// font init
@@ -87,13 +101,13 @@ func init() {
 }
 
 func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
-	var currentFont *font.Face
-	if rand.Intn(100) < 10 {
-		currentFont = &marqueeFontXl
-	} else {
-		currentFont = &marqueeFont
-	}
-	return &Marquee{speed: speed, currentFont: currentFont, color: color, oneShot: oneShot}
+	//var currentFont *font.Face
+	// if rand.Intn(100) < 10 {
+	// 	currentFont = &marqueeFontXl
+	// } else {
+	// 	currentFont = &marqueeFont
+	// }
+	return &Marquee{speed: speed, currentFont: &marqueeFont, color: color, oneShot: oneShot}
 }
 
 func (m *Marquee) enable(b bool) {
@@ -108,17 +122,22 @@ func (m *Marquee) setText(j string) {
 		log.Println(err.Error())
 		return
 	}
-	msgEmotes := map[string]emoteInfo{}
+	m.xOffsets = []float64{}
+	m.sequence = sequence{}
+	eIndices := emoteIndices{}
 	if msg.Emotes != "" {
-		//	2313213:14-30,42-58/
 		const prefixLen = 13
 		emoteData := strings.Split(msg.Emotes, "/")
-		//emotes := map[string][]emoteIndex{}
+
 		for _, e := range emoteData {
 			split := strings.Split(e, ":")
+			img, err := getImageFromCDN(split[0])
+			if err != nil {
+				log.Fatal(err)
+			}
 			indices := strings.Split(split[1], ",")
-			eIndices := make([]emoteIndex, len(indices))
-			for k, i := range indices {
+			//eIndices := make([]emoteIndex, len(indices))
+			for _, i := range indices {
 				nums := strings.Split(i, "-")
 				start, err := strconv.Atoi(nums[0])
 				if err != nil {
@@ -128,31 +147,52 @@ func (m *Marquee) setText(j string) {
 				if err != nil {
 					log.Println(err.Error())
 				}
-				eIndices[k] = emoteIndex{start, end}
+				eIndices = append(eIndices, emoteIndex{
+					start: start - prefixLen,
+					end:   end - prefixLen,
+					img:   img,
+				})
 			}
-			img, err := getImageFromCDN(split[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-			msgEmotes[split[0]] = emoteInfo{eIndices, img}
-			fmt.Println(msgEmotes)
 		}
-		m.text = msg.RawMessage
+		sort.Sort(eIndices)
+		fmt.Println(eIndices)
+		var offset int
+		strippedMsg := msg.RawMessage
+		offsetPoints := []float64{0}
+		for _, v := range eIndices {
+			var txt string
+			txt, strippedMsg = strippedMsg[:v.start-offset], strippedMsg[v.end-offset+1:]
+			offset += v.end - v.start + len(txt) + 1
+			txt = strings.Trim(txt, " ")
+			m.sequence = append(m.sequence, txt)
+			m.totalWidth += text.BoundString(marqueeFont, txt).Dx() + 25
+			offsetPoints = append(offsetPoints, float64(m.totalWidth))
+			m.sequence = append(m.sequence, v.img)
+			m.totalWidth += v.img.Bounds().Dx() + 25
+			offsetPoints = append(offsetPoints, float64(m.totalWidth))
+		}
+		m.sequence = append(m.sequence, strippedMsg)
+		m.totalWidth += text.BoundString(marqueeFont, strippedMsg).Dx()
+		m.xOffsets = offsetPoints
 	} else {
-		m.text = msg.RawMessage
+		m.xOffsets = []float64{0}
+		m.sequence = append(m.sequence, msg.RawMessage)
+		m.textBounds = text.BoundString(*m.currentFont, msg.RawMessage)
+		m.totalWidth = m.textBounds.Dx()
 	}
-	m.emotes = msgEmotes
-	m.textBounds = text.BoundString(*m.currentFont, m.text)
+	m.text = msg.RawMessage
+	//m.emotes = msgEmotes
 	// 0 to screenHeight - m.textBounds.Dy() + m.yOffset
-	m.y = rand.Intn(screenHeight-m.textBounds.Dy()) + m.textBounds.Dy()
+	m.y = float64(rand.Intn(screenHeight-m.textBounds.Dy()) + m.textBounds.Dy())
 	m.color = color.RGBA{uint8(rand.Intn(255)), uint8(rand.Intn(255)), uint8(rand.Intn(255)), 0xff}
 	m.x = screenWidth
+
 	m.on = true
 }
 
 func (m *Marquee) Update(delta float64) error {
 	m.x -= m.speed * delta / 1000.0
-	if m.x+float64(m.textBounds.Dx()) < 0 {
+	if m.x+float64(m.totalWidth) < 0 {
 		if m.oneShot {
 			return errors.New("i'm done")
 		} else {
@@ -164,29 +204,17 @@ func (m *Marquee) Update(delta float64) error {
 
 func (m *Marquee) Draw(screen *ebiten.Image) {
 	if m.on {
-		//text.Draw(screen, m.text, *m.currentFont, m.x+1, m.y+1, m.color)
-		text.Draw(screen, m.text, *m.currentFont, int(m.x), m.y, m.color)
-	}
-	if len(m.emotes) > 0 {
-		for _, em := range m.emotes {
-			//em.img.DrawImage(screen, nil)
-			screen.DrawImage(em.img, nil)
+		for k, v := range m.sequence {
+			switch thing := v.(type) {
+			case string:
+				text.Draw(screen, thing, *m.currentFont, int(m.x)+int(m.xOffsets[k]), int(m.y), m.color)
+			case *ebiten.Image:
+				op := ebiten.DrawImageOptions{}
+				op.GeoM.Translate(m.x+m.xOffsets[k], m.y-float64(thing.Bounds().Dy()))
+				screen.DrawImage(thing, &op)
+			}
 		}
 	}
-}
-
-func (m *Marquee) Embiggen() {
-	m.on = false
-	m.currentFont = &marqueeFontXl
-	m.yOffset = xlYOffset
-	m.setText(m.text)
-}
-
-func (m *Marquee) Smol() {
-	m.on = false
-	m.currentFont = &marqueeFont
-	m.yOffset = regYOffset
-	m.setText(m.text)
 }
 
 func (m *Marquee) SetSpeed(speed float64) {
