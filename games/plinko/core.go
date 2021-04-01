@@ -305,7 +305,7 @@ func (c *Core) Draw(screen *ebiten.Image) {
 
 func (c *Core) DropBall(pos int, playerName string) {
 	// make a new token with its pos set to the selected drop point
-	if pos < 0 || pos > len(c.queues) {
+	if pos < 0 || pos >= len(c.queues) {
 		return // do nothing for now, but should return an error
 		// or is this validated on the other end? no
 	}
