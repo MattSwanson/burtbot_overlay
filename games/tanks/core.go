@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/MattSwanson/ebiten/v2"
+	"github.com/MattSwanson/ebiten/v2/inpututil"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
@@ -70,6 +71,7 @@ func (c *Core) PlaceTanks() {
 			}
 		}
 		c.tanks[i].setPosition(float64(xspawns[i]), y)
+		fmt.Println(c.tanks[i].x, c.tanks[i].y)
 	}
 }
 
@@ -78,4 +80,11 @@ func (c *Core) Draw(screen *ebiten.Image) {
 	for _, t := range c.tanks {
 		t.Draw(screen)
 	}
+}
+
+func (c *Core) Update() error {
+	if inpututil.IsKeyJustPressed(ebiten.KeyLeft) {
+		c.PlaceTanks()
+	}
+	return nil
 }

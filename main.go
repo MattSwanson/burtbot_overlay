@@ -159,6 +159,7 @@ const (
 	SingleMarqueeCmd
 	TTS
 	PlinkoCmd
+	TanksCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -296,6 +297,14 @@ func (g *Game) Update() error {
 					g.plinkoRunning = false
 				}
 			}
+		case TanksCmd:
+			if key.args[0] == "start" {
+				g.tanksRunning = true
+			} else if key.args[0] == "stop" {
+				g.tanksRunning = false
+			} else if key.args[0] == "place" {
+				g.tanks.PlaceTanks()
+			}
 		}
 	default:
 	}
@@ -318,6 +327,9 @@ func (g *Game) Update() error {
 			}
 		}
 	}
+	if g.tanksRunning {
+		g.tanks.Update()
+	}
 
 	for i := 0; i < g.sprites.num; i++ {
 		if err := g.sprites.sprites[i].Update(delta); err != nil {
@@ -336,6 +348,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		op.GeoM.Translate(float64(cx-(g.bigMouseImg.Bounds().Dx()/2)), float64(cy-(g.bigMouseImg.Bounds().Dy()/2)))
 		screen.DrawImage(g.bigMouseImg, op)
 	}
+	if g.tanksRunning {
+		g.tanks.Draw(screen)
+	}
 	if g.gameRunning {
 		g.snakeGame.Draw(screen)
 	}
@@ -348,9 +363,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.plinkoRunning {
 		g.plinko.Draw(screen)
 	}
-	if g.tanksRunning {
-		g.tanks.Draw(screen)
-	}
+
 	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 
@@ -497,6 +510,11 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Con
 				continue
 			}
 			c <- cmd{PlinkoCmd, fields[1:]}
+		case "tanks":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{TanksCmd, fields[1:]}
 		}
 		fmt.Println(fields)
 	}
