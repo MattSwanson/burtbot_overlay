@@ -19,6 +19,7 @@ import (
 
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
+	"github.com/MattSwanson/burtbot_overlay/visuals"
 	"github.com/MattSwanson/ebiten/v2"
 	"github.com/MattSwanson/ebiten/v2/audio"
 	"github.com/MattSwanson/ebiten/v2/audio/wav"
@@ -138,6 +139,7 @@ type Game struct {
 	bigMouseImg     *ebiten.Image
 	marquees        []*Marquee
 	marqueesEnabled bool
+	bopometer       *visuals.Bopometer
 	lastUpdate      time.Time
 }
 
@@ -160,6 +162,7 @@ const (
 	TTS
 	PlinkoCmd
 	TanksCmd
+	BopCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -305,6 +308,23 @@ func (g *Game) Update() error {
 			} else if key.args[0] == "place" {
 				g.tanks.PlaceTanks()
 			}
+		case BopCmd:
+			if key.args[0] == "start" && !g.bopometer.IsRunning() {
+				g.bopometer.Reset()
+				g.bopometer.SetRunning(true)
+			} else if key.args[0] == "add" && g.bopometer.IsRunning() {
+				if len(key.args) < 2 {
+					return nil
+				}
+				n, err := strconv.Atoi(key.args[1])
+				if err != nil {
+					return nil
+				}
+				g.bopometer.Add(n)
+			} else if key.args[0] == "stop" && g.bopometer.IsRunning() {
+				g.bopometer.Finish()
+				g.bopometer.SetRunning(false)
+			}
 		}
 	default:
 	}
@@ -317,6 +337,9 @@ func (g *Game) Update() error {
 	}
 	if g.showStatic {
 		g.staticLayer.Update()
+	}
+	if g.bopometer.IsRunning() {
+		g.bopometer.Update(delta)
 	}
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
@@ -363,7 +386,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.plinkoRunning {
 		g.plinko.Draw(screen)
 	}
-
+	if g.bopometer.IsRunning() {
+		g.bopometer.Draw(screen)
+	}
 	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 
@@ -419,6 +444,7 @@ func main() {
 	game.bigMouseImg = sprites[2]
 	game.tanks = tanks.Load(screenWidth, screenHeight)
 	game.tanksRunning = true
+	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	// _, err = getAvailableVoices()
 	// if err != nil {
 	// 	log.Println(err.Error())
@@ -515,6 +541,11 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Con
 				continue
 			}
 			c <- cmd{TanksCmd, fields[1:]}
+		case "bop":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{BopCmd, fields[1:]}
 		}
 		fmt.Println(fields)
 	}
