@@ -305,8 +305,24 @@ func (g *Game) Update() error {
 				g.tanksRunning = true
 			} else if key.args[0] == "stop" {
 				g.tanksRunning = false
-			} else if key.args[0] == "place" {
-				g.tanks.PlaceTanks()
+				g.tanks.Reset()
+			} else if key.args[0] == "join" {
+				if len(key.args) < 2 {
+					return nil
+				}
+				g.tanks.AddPlayer(key.args[1])
+			} else if key.args[0] == "reset" {
+				g.tanks.Reset()
+			} else if key.args[0] == "shoot" {
+				a, err := strconv.ParseFloat(key.args[2], 64)
+				if err != nil {
+					return nil
+				}
+				v, err := strconv.ParseFloat(key.args[3], 64)
+				if err != nil {
+					return nil
+				}
+				g.tanks.Shoot(key.args[1], a, v)
 			}
 		case BopCmd:
 			if key.args[0] == "start" && !g.bopometer.IsRunning() {
@@ -351,7 +367,7 @@ func (g *Game) Update() error {
 		}
 	}
 	if g.tanksRunning {
-		g.tanks.Update()
+		g.tanks.Update(delta)
 	}
 
 	for i := 0; i < g.sprites.num; i++ {
@@ -443,7 +459,7 @@ func main() {
 	game.snakeGame = newSnake(game.sounds)
 	game.bigMouseImg = sprites[2]
 	game.tanks = tanks.Load(screenWidth, screenHeight)
-	game.tanksRunning = true
+	//game.tanksRunning = true
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	// _, err = getAvailableVoices()
 	// if err != nil {

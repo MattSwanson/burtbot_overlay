@@ -27,7 +27,7 @@ func generateTerrain(screenWidth, screenHeight int) *ebiten.Image {
 	pixels := make([]byte, imgW*imgH*4)
 	for x := 0; x < imgW; x++ {
 		for y := int(heightmap[x]); y < imgH; y++ {
-			pixels[(y*4*imgW)+(x*4)+1] = 0xff
+			pixels[(y*4*imgW)+(x*4)+1] = 0x33
 			pixels[(y*4*imgW)+(x*4)+3] = 0xff
 		}
 	}
