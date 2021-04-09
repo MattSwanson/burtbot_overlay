@@ -15,6 +15,8 @@ type tank struct {
 	playerName               string
 	x                        float64
 	y                        float64
+	cx                       float64
+	cy                       float64
 	w                        float64
 	h                        float64
 	a                        float64
@@ -57,7 +59,7 @@ func NewTank(playerName string, imgURL string) *tank {
 		img:                      img,
 		w:                        scale * float64(img.Bounds().Dx()),
 		h:                        scale * float64(img.Bounds().Dy()),
-		projectileOffsetDistance: 70,
+		projectileOffsetDistance: 45,
 		scale:                    scale,
 	}
 }
@@ -106,11 +108,17 @@ func (t *tank) setBounds() {
 	pos4 := mat.NewDense(3, 1, []float64{t.x, t.y + t.h, 1})
 	var fp4 mat.Dense
 	fp4.Mul(final, pos4)
+
+	center := mat.NewDense(3, 1, []float64{t.x + t.w/2, t.y + t.h/2, 1})
+	var cprime mat.Dense
+	cprime.Mul(final, center)
+	t.cx, t.cy = cprime.At(0, 0), cprime.At(1, 0)
 	bounds[0] = edge{fp1.At(0, 0), fp1.At(1, 0), fp2.At(0, 0), fp2.At(1, 0)}
 	bounds[1] = edge{fp2.At(0, 0), fp2.At(1, 0), fp3.At(0, 0), fp3.At(1, 0)}
 	bounds[2] = edge{fp3.At(0, 0), fp3.At(1, 0), fp4.At(0, 0), fp4.At(1, 0)}
 	bounds[3] = edge{fp4.At(0, 0), fp4.At(1, 0), fp1.At(0, 0), fp1.At(1, 0)}
 	t.bounds = bounds
+
 }
 
 func (t *tank) Draw(screen *ebiten.Image) {

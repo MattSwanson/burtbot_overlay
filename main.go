@@ -76,6 +76,14 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	ga.sounds["indigo"], err = initSound(ga.audioContext, "sounds/Indigo.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ga.sounds["sosumi"], err = initSound(ga.audioContext, "sounds/Sosumi.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// font init
 	bs, err := os.ReadFile("caskaydia.TTF")
@@ -460,7 +468,7 @@ func main() {
 	//game.plinkoRunning = true
 	game.snakeGame = newSnake(game.sounds)
 	game.bigMouseImg = sprites[2]
-	game.tanks = tanks.Load(screenWidth, screenHeight)
+	game.tanks = tanks.Load(screenWidth, screenHeight, game.sounds)
 	//game.tanksRunning = true
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	// _, err = getAvailableVoices()

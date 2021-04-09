@@ -6,8 +6,11 @@ import (
 	"log"
 	"math"
 	"os"
+	"time"
 
 	"github.com/MattSwanson/ebiten/v2"
+	"github.com/MattSwanson/ebiten/v2/audio"
+	"github.com/MattSwanson/ebiten/v2/ebitenutil"
 	"github.com/MattSwanson/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -20,7 +23,8 @@ const (
 var playerLabelFont font.Face
 var instFont font.Face
 var winnerFont font.Face
-var xspawns = []int{300, 986, 1574, 2260}
+var xspawns = []int{}
+var boomImg *ebiten.Image
 
 type Core struct {
 	tanks         []*tank
@@ -35,9 +39,14 @@ type Core struct {
 	gameOver      bool
 	winner        string
 	winnerImg     *ebiten.Image
+	showBoom      bool
+	boomX         float64
+	boomY         float64
+	boomTime      time.Time
+	sounds        map[string]*audio.Player
 }
 
-func Load(sWidth, sHeight int) *Core {
+func Load(sWidth, sHeight int, sounds map[string]*audio.Player) *Core {
 	bs, err := os.ReadFile("caskaydia.TTF")
 	if err != nil {
 		log.Fatal(err)
@@ -71,6 +80,12 @@ func Load(sWidth, sHeight int) *Core {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	boomImg, _, err = ebitenutil.NewImageFromFile("./images/tanks/tanks_boom.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	tanks := []*tank{}
 	// for i := 0; i < maxPlayers; i++ {
 	// 	tanks[i] = NewTank(fmt.Sprintf("player %d", i+1))
@@ -86,6 +101,7 @@ func Load(sWidth, sHeight int) *Core {
 		terrainImg:   terrain,
 		screenWidth:  sWidth,
 		screenHeight: sHeight,
+		sounds:       sounds,
 	}
 }
 
@@ -139,9 +155,16 @@ func (c *Core) Draw(screen *ebiten.Image) {
 	if c.projectile != nil {
 		c.projectile.Draw(screen)
 	}
+	if c.showBoom {
+		op := ebiten.DrawImageOptions{}
+		op.GeoM.Translate(c.boomX, c.boomY)
+		screen.DrawImage(boomImg, &op)
+	}
 	if c.gameStarted {
 		s := fmt.Sprintf("%s's [%d] turn. !tanks shoot <angle> <velocity>", c.tanks[c.currentTurn].playerName, c.currentTurn)
 		text.Draw(screen, s, instFont, 75, 1350, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
+	} else {
+		text.Draw(screen, "type '!tanks join' to join the game!", instFont, 75, 1350, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
 	}
 	// draw a wind indicator
 	if c.gameOver {
@@ -154,6 +177,9 @@ func (c *Core) Draw(screen *ebiten.Image) {
 }
 
 func (c *Core) Update(delta float64) error {
+	if c.showBoom && time.Since(c.boomTime) >= time.Second {
+		c.showBoom = false
+	}
 	if c.projectile == nil {
 		return nil
 	}
@@ -163,10 +189,13 @@ func (c *Core) Update(delta float64) error {
 		maxDist := diag + 2*tank.w
 		var totalDist float64
 		for _, e := range tank.bounds {
-			totalDist += math.Sqrt((e.x0-c.projectile.x+c.projectile.radius)*(e.x0-c.projectile.x+c.projectile.radius) + (e.y0-c.projectile.y+c.projectile.radius)*(e.y0-c.projectile.y+c.projectile.radius))
+			totalDist += math.Sqrt((e.x0-c.projectile.x+c.projectile.radius)*(e.x0-c.projectile.x+c.projectile.radius)+(e.y0-c.projectile.y+c.projectile.radius)*(e.y0-c.projectile.y+c.projectile.radius)) - c.projectile.radius
 		}
 		if totalDist <= maxDist {
 			// ded?
+			c.boomX, c.boomY = tank.cx-float64(boomImg.Bounds().Dx())/2, tank.cy-float64(boomImg.Bounds().Dy())/2
+			c.boomTime = time.Now()
+			c.showBoom = true
 			c.tanks = removeTank(c.tanks, k)
 			c.projectile = nil
 			if len(c.tanks) == 1 {
@@ -176,7 +205,12 @@ func (c *Core) Update(delta float64) error {
 				c.winnerImg = c.tanks[0].img
 				c.gameOver = true
 				c.gameStarted = false
+				c.sounds["indigo"].Rewind()
+				c.sounds["indigo"].Play()
 				return nil
+			} else {
+				c.sounds["sosumi"].Rewind()
+				c.sounds["sosumi"].Play()
 			}
 			c.advanceTurn(k)
 			return nil
@@ -230,6 +264,7 @@ func (c *Core) Reset() {
 	c.tanks = []*tank{}
 	c.playersJoined = 0
 	c.currentTurn = 0
+	c.showBoom = false
 }
 
 func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
@@ -239,8 +274,11 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 	angle = angle*math.Pi/180.0 - c.tanks[c.currentTurn].a
 	pSpawnOffsetX := math.Cos(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
 	pSpawnOffsetY := math.Sin(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
-	p := NewProjectile(c.tanks[c.currentTurn].x+c.tanks[c.currentTurn].w/2+pSpawnOffsetX,
-		c.tanks[c.currentTurn].y+c.tanks[c.currentTurn].h/2-pSpawnOffsetY,
+	// p := NewProjectile(c.tanks[c.currentTurn].x+c.tanks[c.currentTurn].w/2+pSpawnOffsetX,
+	// 	c.tanks[c.currentTurn].y+c.tanks[c.currentTurn].h/2-pSpawnOffsetY,
+	// 	c.wind)
+	p := NewProjectile(c.tanks[c.currentTurn].cx+pSpawnOffsetX,
+		c.tanks[c.currentTurn].cy-pSpawnOffsetY,
 		c.wind)
 	vx := math.Cos(angle) * totalVelocity
 	vy := -math.Sin(angle) * totalVelocity

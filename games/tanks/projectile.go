@@ -7,7 +7,7 @@ import (
 )
 
 const gravity float64 = 500.0
-const radius float64 = 16.0
+const radius float64 = 8.0
 
 type projectile struct {
 	x      float64
@@ -20,7 +20,7 @@ type projectile struct {
 }
 
 func NewProjectile(x, y float64, wind float64) *projectile {
-	img := ebiten.NewImage(int(radius), int(radius))
+	img := ebiten.NewImage(int(radius*2), int(radius*2))
 	img.Fill(color.RGBA{0xff, 0x00, 0x00, 0xff})
 	return &projectile{
 		x:      x,
