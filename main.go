@@ -307,10 +307,10 @@ func (g *Game) Update() error {
 				g.tanksRunning = false
 				g.tanks.Reset()
 			} else if key.args[0] == "join" {
-				if len(key.args) < 2 {
+				if len(key.args) < 3 {
 					return nil
 				}
-				g.tanks.AddPlayer(key.args[1])
+				g.tanks.AddPlayer(key.args[1], key.args[2])
 			} else if key.args[0] == "reset" {
 				g.tanks.Reset()
 			} else if key.args[0] == "shoot" {
@@ -323,6 +323,8 @@ func (g *Game) Update() error {
 					return nil
 				}
 				g.tanks.Shoot(key.args[1], a, v)
+			} else if key.args[0] == "begin" {
+				g.tanks.Begin()
 			}
 		case BopCmd:
 			if key.args[0] == "start" && !g.bopometer.IsRunning() {

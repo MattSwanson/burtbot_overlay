@@ -19,7 +19,8 @@ const (
 
 var playerLabelFont font.Face
 var instFont font.Face
-var xspawns = []int{400, 800, 1200, 2000}
+var winnerFont font.Face
+var xspawns = []int{300, 986, 1574, 2260}
 
 type Core struct {
 	tanks         []*tank
@@ -31,6 +32,9 @@ type Core struct {
 	wind          float64
 	projectile    *projectile
 	gameStarted   bool
+	gameOver      bool
+	winner        string
+	winnerImg     *ebiten.Image
 }
 
 func Load(sWidth, sHeight int) *Core {
@@ -53,6 +57,14 @@ func Load(sWidth, sHeight int) *Core {
 	}
 	instFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
 		Size:    48,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	winnerFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    72,
 		DPI:     dpi,
 		Hinting: font.HintingFull,
 	})
@@ -132,6 +144,13 @@ func (c *Core) Draw(screen *ebiten.Image) {
 		text.Draw(screen, s, instFont, 75, 1350, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
 	}
 	// draw a wind indicator
+	if c.gameOver {
+		s := fmt.Sprintf("%s is the winner!", c.winner)
+		text.Draw(screen, s, winnerFont, 410, c.screenHeight/2, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
+		op := ebiten.DrawImageOptions{}
+		op.GeoM.Translate(100.0, float64(c.screenHeight)/2-float64(c.winnerImg.Bounds().Dy())/2)
+		screen.DrawImage(c.winnerImg, &op)
+	}
 }
 
 func (c *Core) Update(delta float64) error {
@@ -140,21 +159,44 @@ func (c *Core) Update(delta float64) error {
 	}
 	// tank collision
 	for k, tank := range c.tanks {
-		dx := c.projectile.x - tank.x - tank.w/2.0
-		dy := c.projectile.y - tank.y - tank.h/2.0
-		m := math.Sqrt(dx*dx + dy*dy)
-		if m <= c.projectile.radius+tank.w/2.0 {
+		diag := math.Sqrt(tank.w*tank.w + tank.h*tank.h)
+		maxDist := diag + 2*tank.w
+		var totalDist float64
+		for _, e := range tank.bounds {
+			totalDist += math.Sqrt((e.x0-c.projectile.x+c.projectile.radius)*(e.x0-c.projectile.x+c.projectile.radius) + (e.y0-c.projectile.y+c.projectile.radius)*(e.y0-c.projectile.y+c.projectile.radius))
+		}
+		if totalDist <= maxDist {
+			// ded?
 			c.tanks = removeTank(c.tanks, k)
 			c.projectile = nil
 			if len(c.tanks) == 1 {
 				// win screen
 				// winrar(c.tanks[0])
+				c.winner = c.tanks[0].playerName
+				c.winnerImg = c.tanks[0].img
+				c.gameOver = true
 				c.gameStarted = false
 				return nil
 			}
 			c.advanceTurn(k)
 			return nil
 		}
+
+		// if tank.bounds[0].IsLeft(c.projectile.x+radius, c.projectile.y+radius) > 0 && tank.bounds[1].IsLeft(c.projectile.x+radius, c.projectile.y+radius) > 0 && tank.bounds[2].IsLeft(c.projectile.x+radius, c.projectile.y+radius) > 0 && tank.bounds[3].IsLeft(c.projectile.x+radius, c.projectile.y+radius) > 0 {
+		// 	c.tanks = removeTank(c.tanks, k)
+		// 	c.projectile = nil
+		// 	if len(c.tanks) == 1 {
+		// 		// win screen
+		// 		// winrar(c.tanks[0])
+		// 		c.winner = c.tanks[0].playerName
+		// 		c.winnerImg = c.tanks[0].img
+		// 		c.gameOver = true
+		// 		c.gameStarted = false
+		// 		return nil
+		// 	}
+		// 	c.advanceTurn(k)
+		// 	return nil
+		// }
 	}
 
 	// ground collision
@@ -183,8 +225,9 @@ func (c *Core) Update(delta float64) error {
 
 func (c *Core) Reset() {
 	c.gameStarted = false
+	c.gameOver = false
 	c.terrainImg = generateTerrain(c.screenWidth, c.screenHeight)
-	c.tanks = make([]*tank, maxPlayers)
+	c.tanks = []*tank{}
 	c.playersJoined = 0
 	c.currentTurn = 0
 }
@@ -193,7 +236,7 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 	if !c.gameStarted || player != c.tanks[c.currentTurn].playerName {
 		return
 	}
-	angle = angle * math.Pi / 180.0
+	angle = angle*math.Pi/180.0 - c.tanks[c.currentTurn].a
 	pSpawnOffsetX := math.Cos(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
 	pSpawnOffsetY := math.Sin(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
 	p := NewProjectile(c.tanks[c.currentTurn].x+c.tanks[c.currentTurn].w/2+pSpawnOffsetX,
@@ -205,21 +248,42 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 	c.projectile = p
 }
 
-func (c *Core) AddPlayer(playerName string) {
-	if c.playersJoined == maxPlayers {
+func (c *Core) AddPlayer(playerName string, imgURL string) {
+	if /* c.playersJoined == maxPlayers || */ c.gameStarted {
 		return
 	}
-	t := NewTank(playerName)
+	t := NewTank(playerName, imgURL)
+	t.setPosition(0, t.h*float64(c.playersJoined))
 	c.tanks = append(c.tanks, t)
-	c.PlaceTank(c.playersJoined)
+	//c.PlaceTank(c.playersJoined)
 	c.playersJoined++
-	if c.playersJoined == maxPlayers {
-		c.gameStarted = true
+	// if c.playersJoined == maxPlayers {
+	// 	c.gameStarted = true
+	// }
+}
+
+func (c *Core) Begin() {
+	if c.playersJoined < 2 {
+		return
+	}
+
+	// generate xpos
+	xspawns = []int{300}
+	if c.playersJoined > 2 {
+		gap := 1960 / (c.playersJoined - 1)
+		for i := 1; i < c.playersJoined-1; i++ {
+			x := 300 + gap*i
+			xspawns = append(xspawns, x)
+		}
+	}
+	xspawns = append(xspawns, 2260)
+	c.gameStarted = true
+
+	for i := 0; i < c.playersJoined; i++ {
+		c.PlaceTank(i)
 	}
 }
 
 func removeTank(tanks []*tank, i int) []*tank {
-	// tanks[len(tanks)-1], tanks[i] = tanks[i], tanks[len(tanks)-1]
-	// return tanks[:len(tanks)-1]
 	return append(tanks[:i], tanks[i+1:]...)
 }
