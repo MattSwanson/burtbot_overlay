@@ -17,9 +17,10 @@ type projectile struct {
 	radius float64
 	img    *ebiten.Image
 	wv     float64
+	marker bool
 }
 
-func NewProjectile(x, y float64, wind float64) *projectile {
+func NewProjectile(x, y float64, wind float64, marker bool) *projectile {
 	img := ebiten.NewImage(int(radius*2), int(radius*2))
 	img.Fill(color.RGBA{0xff, 0x00, 0x00, 0xff})
 	return &projectile{
@@ -28,10 +29,14 @@ func NewProjectile(x, y float64, wind float64) *projectile {
 		img:    img,
 		wv:     wind,
 		radius: radius,
+		marker: marker,
 	}
 }
 
 func (p *projectile) Update(delta float64) {
+	if p.marker {
+		return
+	}
 	p.vx = p.vx + p.wv*delta/1000.0
 	p.vy = p.vy + gravity*delta/1000.0
 	p.x += p.vx * delta / 1000.0

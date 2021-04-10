@@ -13,7 +13,7 @@ const (
 	smoothness       = 4    // lower = smoover - 4 is good balance
 )
 
-func generateTerrain(screenWidth, screenHeight int) *ebiten.Image {
+func generateTerrain(screenWidth, screenHeight int) (*ebiten.Image, []float64) {
 	rand.Seed(time.Now().UnixNano())
 	noise := opensimplex.NewNormalized(rand.Int63())
 	w, h := screenWidth, 1
@@ -32,5 +32,5 @@ func generateTerrain(screenWidth, screenHeight int) *ebiten.Image {
 		}
 	}
 	img.ReplacePixels(pixels)
-	return img
+	return img, heightmap
 }
