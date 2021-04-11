@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"time"
 
 	"github.com/MattSwanson/ebiten/v2"
 	"github.com/MattSwanson/ebiten/v2/ebitenutil"
@@ -36,6 +37,15 @@ func init() {
 		log.Fatal(err)
 	}
 
+	bigBopFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    256,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	img, _, err := ebitenutil.NewImageFromFile("./images/bopM.png")
 	if err != nil {
 		log.Fatal(err)
@@ -56,24 +66,29 @@ func init() {
 }
 
 const (
-	gravity = 700
+	gravity    = 700
+	finalLabel = "Final Rating:"
 )
 
 var bopFont font.Face
+var bigBopFont font.Face
 var mediumBop *ebiten.Image
 var largeBop *ebiten.Image
 var bg *ebiten.Image
+var finalLabelX int
 
 type Bopometer struct {
 	currentRating float64
 	totalBops     int
 	running       bool
+	finished      bool
 	bops          []*bop
 	bopIndicatorY float64
 	writeChannel  chan string
 }
 
 func NewBopometer(wc chan string) *Bopometer {
+	finalLabelX = int(text.BoundString(bopFont, finalLabel).Dx() / 2)
 	return &Bopometer{bops: []*bop{}, writeChannel: wc}
 }
 
@@ -93,6 +108,10 @@ func (b *Bopometer) Draw(screen *ebiten.Image) {
 		for _, bp := range b.bops {
 			bp.Draw(screen)
 		}
+	}
+	if b.finished {
+		text.Draw(screen, finalLabel, bopFont, finalLabelX, 400, color.RGBA{0xff, 0x00, 0x00, 0xff})
+		text.Draw(screen, fmt.Sprintf("%.2f", b.currentRating), bigBopFont, 800, 720, color.RGBA{0xff, 0x00, 0x00, 0xff})
 	}
 }
 
@@ -137,9 +156,15 @@ func (b *Bopometer) Add(n int) {
 
 func (b *Bopometer) SetRunning(bo bool) { b.running = bo }
 func (b *Bopometer) IsRunning() bool    { return b.running }
+func (b *Bopometer) IsFinished() bool   { return b.finished }
 func (b *Bopometer) Reset()             { b.currentRating = 0; b.bops = []*bop{}; b.totalBops = 0 }
 func (b *Bopometer) Finish() {
 	b.writeChannel <- fmt.Sprintf("bop result %.2f\n", b.currentRating)
+	b.finished = true
+	go func() {
+		time.Sleep(time.Second * 10)
+		b.finished = false
+	}()
 }
 
 type bop struct {

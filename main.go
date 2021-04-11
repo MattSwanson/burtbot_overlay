@@ -412,7 +412,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.plinkoRunning {
 		g.plinko.Draw(screen)
 	}
-	if g.bopometer.IsRunning() {
+	if g.bopometer.IsRunning() || g.bopometer.IsFinished() {
 		g.bopometer.Draw(screen)
 	}
 	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
