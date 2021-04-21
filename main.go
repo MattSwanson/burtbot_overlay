@@ -31,6 +31,7 @@ import (
 //var startTime time.Time
 var ga Game
 var myFont font.Face
+var mwhipImg *ebiten.Image
 
 const (
 	audioSampleRate         = 44100
@@ -81,6 +82,11 @@ func init() {
 		log.Fatal(err)
 	}
 	ga.sounds["sosumi"], err = initSound(ga.audioContext, "sounds/Sosumi.wav")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mwhipImg, _, err = ebitenutil.NewImageFromFile("./images/mwhip.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -149,6 +155,7 @@ type Game struct {
 	marqueesEnabled bool
 	bopometer       *visuals.Bopometer
 	lastUpdate      time.Time
+	showWhip        bool
 }
 
 type cmd struct {
@@ -171,6 +178,7 @@ const (
 	PlinkoCmd
 	TanksCmd
 	BopCmd
+	MiracleCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -349,6 +357,14 @@ func (g *Game) Update() error {
 				g.bopometer.Finish()
 				g.bopometer.SetRunning(false)
 			}
+		case MiracleCmd:
+			g.showWhip = true
+			g.sounds["indigo"].Rewind()
+			g.sounds["indigo"].Play()
+			go func() {
+				time.Sleep(time.Second * 5)
+				g.showWhip = false
+			}()
 		}
 	default:
 	}
@@ -420,6 +436,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		for i := 0; i < len(g.marquees); i++ {
 			g.marquees[i].Draw(screen)
 		}
+	}
+
+	if g.showWhip {
+		op := ebiten.DrawImageOptions{}
+		op.GeoM.Scale(0.6, 0.6)
+		op.GeoM.Translate(560, 0)
+		screen.DrawImage(mwhipImg, &op)
 	}
 
 	fps := fmt.Sprintf("FPS: %.2f TPS: %.2f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
@@ -570,6 +593,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Con
 				continue
 			}
 			c <- cmd{BopCmd, fields[1:]}
+		case "miracle":
+			c <- cmd{MiracleCmd, []string{}}
 		}
 		fmt.Println(fields)
 	}
