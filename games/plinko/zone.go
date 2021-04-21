@@ -14,6 +14,7 @@ type zone struct {
 	w           float64
 	h           float64
 	rewardValue int
+	hits        int
 	img         *ebiten.Image
 }
 
@@ -35,5 +36,10 @@ func (z *zone) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(z.x, z.y)
 	screen.DrawImage(z.img, op)
-	text.Draw(screen, fmt.Sprint(z.rewardValue), gameFont, int(z.x+z.w/2), int(z.y+z.h/2), color.RGBA{0x00, 0xff, 0x00, 0x55})
+	text.Draw(screen, fmt.Sprint(z.rewardValue), gameFont, int(z.x+z.w/2), int(gameHeight), color.RGBA{0x00, 0xff, 0x00, 0x55})
+	text.Draw(screen, fmt.Sprint(z.hits), gameFont, int(z.x+z.w/2), int(z.y+3*z.h/2), color.RGBA{0x00, 0xff, 0x00, 0x11})
+}
+
+func (z *zone) Hit() {
+	z.hits++
 }

@@ -7,7 +7,6 @@ import (
 	"image/color"
 	"log"
 	"math"
-	"math/rand"
 	"os"
 	"time"
 
@@ -20,27 +19,30 @@ import (
 )
 
 const (
-	gravity    float64 = 500.0
-	gameHeight float64 = 1300
-	gameWidth  float64 = 2560
-	numRows    int     = 13
-	numColumns int     = 19
+	gravity       float64 = 500.0
+	gameHeight    float64 = 1440
+	gameWidth     float64 = 2560
+	numRows       int     = 13
+	numColumns    int     = 25
+	numDropQueues int     = 5
 )
 
 var gameFont font.Face
 var playerLabelFont font.Face
 var tokenImg *ebiten.Image
+var barrierImg *ebiten.Image
 var timerChannel chan bool
 
+var goalValues = []int{1, 0, 2, 1, 0, 5, 0, 1, 2, 0, 1}
+
 type Core struct {
-	lastUpdate time.Time
-	tokens     []*token
-	pegs       []*peg
-	boxes      []*box
-	goalZones  []*zone
-	queues     []tokenQueue
-	sounds     map[string]*audio.Player
-	//	dropPoints       []fPoint
+	lastUpdate       time.Time
+	tokens           []*token
+	pegs             []*peg
+	goalZones        []*zone
+	barriers         []*barrier
+	queues           []tokenQueue
+	sounds           map[string]*audio.Player
 	currentDropPoint int
 	rewardMultiplier int
 	writeChannel     chan string
@@ -55,6 +57,49 @@ type fPoint struct {
 type fRect struct {
 	min fPoint
 	max fPoint
+}
+
+type vec2f struct {
+	x float64
+	y float64
+}
+
+func dot(a, b vec2f) float64 {
+	return a.x*b.x + a.y*b.y
+}
+
+func add(a, b vec2f) vec2f {
+	return vec2f{a.x + b.x, a.y + b.y}
+}
+
+func scale(v vec2f, s float64) vec2f {
+	return vec2f{v.x * s, v.y * s}
+}
+
+func sub(a, b vec2f) vec2f {
+	return vec2f{a.x - b.x, a.y - b.y}
+}
+
+func angle(a, b vec2f) float64 {
+	return math.Acos(dot(a, b) / mag(a) * mag(b))
+}
+
+func mag(a vec2f) float64 {
+	return math.Sqrt(a.x*a.x + a.y*a.y)
+}
+
+// reflect will return a vector created by
+// reflected input a across normal vector n
+// maybe this should just normalize the second
+// arg?
+func reflect(a, n vec2f) vec2f {
+	// 2(a + n(-a dot n)) - a
+	v := scale(a, -1)
+	v = scale(n, dot(v, n))
+	v = add(a, v)
+	v = scale(v, 2)
+	v = sub(v, a)
+	return v
 }
 
 func (r *fRect) Dx() float64 {
@@ -123,11 +168,17 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	barrierImg, _, err = ebitenutil.NewImageFromFile("./images/plinko/triangle.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	pegs := generatePegs(screenWidth, screenHeight)
 	//dropPoints := []fPoint{}
-	tokenQueues := make([]tokenQueue, 5)
-	for i := 0; i < 5; i++ {
-		dropPoint := fPoint{(screenWidth/2 - float64(tokenImg.Bounds().Dx())) + (float64(i)-2)*300, 20.0}
+	tokenQueues := make([]tokenQueue, numDropQueues)
+	for i := 0; i < numDropQueues; i++ {
+		dropPoint := fPoint{(screenWidth/2 - float64(tokenImg.Bounds().Dx())) + float64(i-numDropQueues/2)*300, 20.0}
 		tq := tokenQueue{
 			Tokens:       []*token{},
 			dropPosition: dropPoint,
@@ -136,25 +187,25 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 	}
 
 	tokens := []*token{}
-	boxes := generateBounds(screenWidth, screenHeight)
+	//boxes := generateBounds(screenWidth, screenHeight)
 	zones := generateGoalZones()
+	barriers := generateBarriers(len(zones) + 1)
 
 	c := Core{
 		tokens:           tokens,
 		pegs:             pegs,
-		boxes:            boxes,
 		sounds:           sounds,
 		currentDropPoint: 2,
 		queues:           tokenQueues,
-		//dropPoints:       dropPoints,
-		goalZones:    zones,
-		writeChannel: wc,
+		barriers:         barriers,
+		goalZones:        zones,
+		writeChannel:     wc,
 	}
 	c.CancelTimer = manageQueues()
 	return &c
 }
 
-func (c *Core) CheckForCollision() {
+func (c *Core) CheckForCollision(delta float64) {
 
 	const drain float64 = 0.95
 	for idx, b := range c.tokens {
@@ -202,44 +253,104 @@ func (c *Core) CheckForCollision() {
 				b.vy = (drain * totalVelocity) / 2.0 * (dy / mag)
 				ot.vx = (drain * totalVelocity) / 2.0 * (-1.0 * dx / mag)
 				ot.vy = (drain * totalVelocity) / 2.0 * (-1.0 * dy / mag)
-				c.sounds["boing"].Rewind()
-				c.sounds["boing"].Play()
+				// c.sounds["boing"].Rewind()
+				// c.sounds["boing"].Play()
+			}
+		}
+
+		if b.x <= 0 {
+			b.vy = b.vy * 0.6
+			b.vx = -b.vx * 0.6
+			b.x = 1
+		}
+		if b.x+2*b.radius >= gameWidth {
+			b.vy = b.vy * 0.6
+			b.vx = -b.vx * 0.6
+			b.x = gameWidth - 2*b.radius - 1
+		}
+
+		// barrier collision
+		for _, barrier := range c.barriers {
+			if b.y < 1300 {
+				break
+			}
+			dx := b.x + b.radius - barrier.x
+			if dx > 0 {
+				px := b.x + b.radius + b.radius*math.Cos(3.926991)
+				py := b.y + b.radius - b.radius*math.Sin(3.926991)
+				if barrier.bounds[0].IsLeft(px, py) <= 0 &&
+					barrier.bounds[1].IsLeft(px, py) <= 0 &&
+					barrier.bounds[2].IsLeft(px, py) <= 0 {
+
+					nx := math.Cos(math.Pi / 4.0)
+					ny := -math.Sin(math.Pi / 4.0)
+
+					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
+					r = scale(r, 0.6)
+					b.vx, b.vy = r.x, r.y
+					fmt.Println(b.vx, b.vy)
+				}
+			} else if dx < 0 {
+				px := b.x + b.radius + b.radius*math.Cos(5.497787)
+				py := b.y + b.radius - b.radius*math.Sin(5.497787)
+				if barrier.bounds[0].IsLeft(px, px) <= 0 &&
+					barrier.bounds[1].IsLeft(px, py) <= 0 &&
+					barrier.bounds[2].IsLeft(px, py) <= 0 {
+
+					nx := math.Cos(3 * math.Pi / 4.0)
+					ny := -math.Sin(3 * math.Pi / 4.0)
+					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
+					r = scale(r, 0.6)
+					b.vx, b.vy = r.x, r.y
+
+					fmt.Println(b.vx, b.vy)
+				}
+			} else {
+				px := b.x + b.radius
+				py := b.y + 2*b.radius
+				if barrier.bounds[0].IsLeft(px, py) <= 0 &&
+					barrier.bounds[1].IsLeft(px, py) <= 0 &&
+					barrier.bounds[2].IsLeft(px, py) <= 0 {
+					b.vy *= -0.6
+					b.vx *= 0.6
+				}
 			}
 		}
 
 		// boundary collisions
-		for _, box := range c.boxes {
-			dY := math.Abs((box.y + 0.5*box.h) - (b.y + b.radius))
-			dX := math.Abs((box.x + 0.5*box.w) - (b.x + b.radius))
-			if dY < 0.5*box.h+b.radius && dX < box.w/2 {
-				b.vy = -b.vy * 0.6
-				b.vx = b.vx * 0.6
-				b.y = box.y - 2.0*b.radius
-				if math.Abs(b.vy) > 25 {
-					c.sounds["boing"].Rewind()
-					c.sounds["boing"].Play()
-				}
-			} else if dX < b.radius+0.5*box.w && dY < box.h/2-b.radius {
-				b.vx = -b.vx * 0.6
-				if b.vx > 0 {
-					b.x = box.x + box.w
-				} else {
-					b.x = box.x - 2.0*b.radius
-				}
-				b.vy = b.vy * 0.6
-				if math.Abs(b.vx) > 25 {
-					c.sounds["boing"].Rewind()
-					c.sounds["boing"].Play()
-				}
-			}
-		}
+		// for _, box := range c.boxes {
+		// 	dY := math.Abs((box.y + 0.5*box.h) - (b.y + b.radius))
+		// 	dX := math.Abs((box.x + 0.5*box.w) - (b.x + b.radius))
+		// 	if dY < 0.5*box.h+b.radius && dX < box.w/2 {
+		// 		b.vy = -b.vy * 0.6
+		// 		b.vx = b.vx * 0.6
+		// 		b.y = box.y - 2.0*b.radius
+		// 		if math.Abs(b.vy) > 25 {
+		// 			c.sounds["boing"].Rewind()
+		// 			c.sounds["boing"].Play()
+		// 		}
+		// 	} else if dX < b.radius+0.5*box.w && dY < box.h/2-b.radius {
+		// 		b.vx = -b.vx * 0.6
+		// 		if b.vx > 0 {
+		// 			b.x = box.x + box.w
+		// 		} else {
+		// 			b.x = box.x - 2.0*b.radius
+		// 		}
+		// 		b.vy = b.vy * 0.6
+		// 		if math.Abs(b.vx) > 25 {
+		// 			c.sounds["boing"].Rewind()
+		// 			c.sounds["boing"].Play()
+		// 		}
+		// 	}
+		// }
 
 		// zone "collisions"
 		// all zones min y is 1225.0
-		if b.y > 1225 {
+		if b.y > 1400 {
 			for _, z := range c.goalZones {
 				if b.x+b.radius >= z.x && b.x+b.radius < z.x+z.w {
 					c.rewardMultiplier = z.rewardValue
+					z.Hit()
 					break
 				}
 			}
@@ -279,7 +390,7 @@ func (c *Core) Update() error {
 	for _, b := range c.tokens {
 		b.Update(delta)
 	}
-	c.CheckForCollision()
+	c.CheckForCollision(delta)
 	c.lastUpdate = time.Now()
 
 	return nil
@@ -292,7 +403,7 @@ func (c *Core) Draw(screen *ebiten.Image) {
 	for _, v := range c.pegs {
 		v.Draw(screen)
 	}
-	for _, v := range c.boxes {
+	for _, v := range c.barriers {
 		v.Draw(screen)
 	}
 	for _, v := range c.goalZones {
@@ -311,6 +422,12 @@ func (c *Core) DropBall(pos int, playerName string) {
 	}
 	t := NewToken(playerName, tokenImg, c.queues[pos].dropPosition)
 	c.queues[pos].push(t)
+}
+
+func (c *Core) DropAll(playerName string) {
+	for i := 0; i < len(c.queues); i++ {
+		c.DropBall(i, playerName)
+	}
 }
 
 func manageQueues() context.CancelFunc {
@@ -383,14 +500,26 @@ func generateGoalZones() []*zone {
 		w := gameWidth / float64(zoneCount)
 		min := fPoint{
 			x: float64(i) * w,
-			y: 1225.0,
+			y: gameHeight,
 		}
 		max := fPoint{
 			x: min.x + w,
-			y: gameHeight,
+			y: gameHeight + 50,
 		}
-		z := NewZone(fRect{min, max}, rand.Intn(10)+1)
+		z := NewZone(fRect{min, max}, goalValues[i])
 		zones[i] = z
 	}
 	return zones
+}
+
+func generateBarriers(n int) []*barrier {
+	barriers := []*barrier{}
+
+	for i := 0; i < n; i++ {
+		b := NewBarrier(barrierImg)
+		b.SetPosition(float64(i)*gameWidth/float64(n-1), gameHeight-b.h/2)
+		barriers = append(barriers, b)
+	}
+
+	return barriers
 }

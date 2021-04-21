@@ -296,9 +296,7 @@ func (g *Game) Update() error {
 					if err != nil {
 						// for testing:
 						if key.args[1] == "all" {
-							for i := 0; i < 5; i++ {
-								g.plinko.DropBall(i, key.args[2])
-							}
+							g.plinko.DropAll(key.args[2])
 						}
 						return nil
 					}
