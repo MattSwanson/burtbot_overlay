@@ -182,7 +182,7 @@ const (
 
 	screenWidth  = 2560
 	screenHeight = 1440
-	maxSprites   = 100000
+	maxSprites   = 1000
 )
 
 var connMessages = []string{
