@@ -9,22 +9,19 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/text"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
-var marqueeFont font.Face
-var marqueeFontXl font.Face
-var emoteCache map[string]*ebiten.Image
+var marqueeFont rl.Font
+var emoteCache map[string]rl.Texture2D
 
 const (
+	textSize   = 96
+	xlTextSize = 512
 	xlYOffset  = screenHeight / 2
 	regYOffset = -5
 )
@@ -42,7 +39,7 @@ type marqueeMsg struct {
 type emoteIndex struct {
 	start int
 	end   int
-	img   *ebiten.Image
+	img   rl.Texture2D
 }
 
 type emoteIndices []emoteIndex
@@ -52,16 +49,15 @@ func (e emoteIndices) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e emoteIndices) Less(i, j int) bool { return e[i].start < e[j].start }
 
 type Marquee struct {
-	on          bool
-	speed       float64
-	x           float64
-	y           float64
-	text        string
-	totalWidth  int
-	textBounds  image.Rectangle
-	color       color.RGBA
-	currentFont *font.Face
-	oneShot     bool
+	on         bool
+	speed      float64
+	x          float64
+	y          float64
+	text       string
+	totalWidth int
+	textBounds image.Rectangle
+	color      color.RGBA
+	oneShot    bool
 	//emotes      map[string]emoteInfo
 	//image    *ebiten.Image
 	sequence sequence
@@ -71,35 +67,11 @@ type Marquee struct {
 type sequence []interface{}
 
 func init() {
-	// font init
-	bs, err := os.ReadFile("caskaydia.TTF")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tt, err := opentype.Parse(bs)
-	if err != nil {
-		log.Fatal(err)
-	}
+	emoteCache = make(map[string]rl.Texture2D)
+}
 
-	const dpi = 72
-	marqueeFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    96,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	const xldpi = 144
-	marqueeFontXl, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    512,
-		DPI:     xldpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	emoteCache = make(map[string]*ebiten.Image)
+func LoadMarqueeFonts() {
+	marqueeFont = rl.LoadFont("caskaydia.TTF")
 }
 
 func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
@@ -109,7 +81,7 @@ func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
 	// } else {
 	// 	currentFont = &marqueeFont
 	// }
-	return &Marquee{speed: speed, currentFont: &marqueeFont, color: color, oneShot: oneShot}
+	return &Marquee{speed: speed, color: color, oneShot: oneShot}
 }
 
 func (m *Marquee) enable(b bool) {
@@ -163,29 +135,32 @@ func (m *Marquee) setText(j string) {
 		offsetPoints := []float64{0}
 		for _, v := range eIndices {
 			var txt string
+			if v.start-offset > len(strippedMsg) {
+				fmt.Println(strippedMsg)
+			}
 			txt, strippedMsg = strippedMsg[:v.start-offset], strippedMsg[v.end-offset+1:]
 			offset += v.end - v.start + len(txt) + 1
 			txt = strings.Trim(txt, " ")
 			m.sequence = append(m.sequence, txt)
-			m.totalWidth += text.BoundString(marqueeFont, txt).Dx() + 25
+			m.totalWidth += int(rl.MeasureTextEx(marqueeFont, txt, textSize, 0).X)
 			offsetPoints = append(offsetPoints, float64(m.totalWidth))
 			m.sequence = append(m.sequence, v.img)
-			m.totalWidth += v.img.Bounds().Dx() + 25
+			m.totalWidth += int(v.img.Width)
 			offsetPoints = append(offsetPoints, float64(m.totalWidth))
 		}
 		m.sequence = append(m.sequence, strippedMsg)
-		m.totalWidth += text.BoundString(marqueeFont, strippedMsg).Dx()
+		m.totalWidth += int(rl.MeasureTextEx(marqueeFont, strippedMsg, textSize, 0).X)
 		m.xOffsets = offsetPoints
 	} else {
 		m.xOffsets = []float64{0}
 		m.sequence = append(m.sequence, msg.RawMessage)
-		m.textBounds = text.BoundString(*m.currentFont, msg.RawMessage)
-		m.totalWidth = m.textBounds.Dx()
+		m.totalWidth = int(rl.MeasureTextEx(marqueeFont, msg.RawMessage, textSize, 0).X)
+		//m.totalWidth = m.textBounds.Dx()
 	}
 	m.text = msg.RawMessage
 	//m.emotes = msgEmotes
 	// 0 to screenHeight - m.textBounds.Dy() + m.yOffset
-	m.y = float64(rand.Intn(screenHeight-m.textBounds.Dy()) + m.textBounds.Dy())
+	m.y = float64(rand.Intn(screenHeight - 100))
 	m.color = color.RGBA{uint8(rand.Intn(255)), uint8(rand.Intn(255)), uint8(rand.Intn(255)), 0xff}
 	m.x = screenWidth
 
@@ -204,16 +179,14 @@ func (m *Marquee) Update(delta float64) error {
 	return nil
 }
 
-func (m *Marquee) Draw(screen *ebiten.Image) {
+func (m *Marquee) Draw() {
 	if m.on {
 		for k, v := range m.sequence {
 			switch thing := v.(type) {
 			case string:
-				text.Draw(screen, thing, *m.currentFont, int(m.x)+int(m.xOffsets[k]), int(m.y), m.color)
-			case *ebiten.Image:
-				op := ebiten.DrawImageOptions{}
-				op.GeoM.Translate(m.x+m.xOffsets[k], m.y-float64(thing.Bounds().Dy()))
-				screen.DrawImage(thing, &op)
+				rl.DrawTextEx(marqueeFont, thing, rl.Vector2{X: float32(m.x + m.xOffsets[k]), Y: float32(m.y)}, textSize, 0, rl.Color(m.color))
+			case rl.Texture2D:
+				rl.DrawTexture(thing, int32(m.x+m.xOffsets[k]+25), int32(m.y), rl.White)
 			}
 		}
 	}
@@ -223,7 +196,7 @@ func (m *Marquee) SetSpeed(speed float64) {
 	m.speed = speed
 }
 
-func getImageFromCDN(id string) (*ebiten.Image, error) {
+func getImageFromCDN(id string) (rl.Texture2D, error) {
 	// check cache first
 	if img, ok := emoteCache[id]; ok {
 		return img, nil
@@ -232,14 +205,14 @@ func getImageFromCDN(id string) (*ebiten.Image, error) {
 	url := fmt.Sprintf("http://static-cdn.jtvnw.net/emoticons/v1/%s/3.0", id)
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return rl.Texture2D{}, err
 	}
 
 	img, _, err := image.Decode(resp.Body)
 	if err != nil {
-		return nil, err
+		return rl.Texture2D{}, err
 	}
 
-	emoteCache[id] = ebiten.NewImageFromImage(img)
+	emoteCache[id] = rl.LoadTextureFromImage(rl.NewImageFromImage(img))
 	return emoteCache[id], nil
 }

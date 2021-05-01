@@ -10,12 +10,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/audio"
-	"github.com/MattSwanson/ebiten/v2/ebitenutil"
-	"github.com/MattSwanson/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+
+	"github.com/MattSwanson/raylib-go/physics"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
@@ -29,8 +28,8 @@ const (
 
 var gameFont font.Face
 var playerLabelFont font.Face
-var tokenImg *ebiten.Image
-var barrierImg *ebiten.Image
+var tokenImg rl.Texture2D
+var barrierImg rl.Texture2D
 var timerChannel chan bool
 
 var goalValues = []int{1, 0, 2, 1, 0, 5, 0, 1, 2, 0, 1}
@@ -42,7 +41,7 @@ type Core struct {
 	goalZones        []*zone
 	barriers         []*barrier
 	queues           []tokenQueue
-	sounds           map[string]*audio.Player
+	sounds           map[string]rl.Sound
 	currentDropPoint int
 	rewardMultiplier int
 	writeChannel     chan string
@@ -134,7 +133,7 @@ func (tq *tokenQueue) pop() (*token, error) {
 	return t, nil
 }
 
-func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc chan string) *Core {
+func Load(screenWidth, screenHeight float64, wc chan string, sounds map[string]rl.Sound) *Core {
 	timerChannel = make(chan bool)
 	bs, err := os.ReadFile("caskaydia.TTF")
 	if err != nil {
@@ -164,12 +163,12 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 		log.Fatal(err)
 	}
 
-	tokenImg, _, err = ebitenutil.NewImageFromFile("./images/plinko/blue_token.png")
+	tokenImg = rl.LoadTexture("./images/plinko/blue_token.png")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	barrierImg, _, err = ebitenutil.NewImageFromFile("./images/plinko/triangle.png")
+	barrierImg = rl.LoadTexture("./images/plinko/triangle.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -178,7 +177,7 @@ func Load(screenWidth, screenHeight float64, sounds map[string]*audio.Player, wc
 	//dropPoints := []fPoint{}
 	tokenQueues := make([]tokenQueue, numDropQueues)
 	for i := 0; i < numDropQueues; i++ {
-		dropPoint := fPoint{(screenWidth/2 - float64(tokenImg.Bounds().Dx())) + float64(i-numDropQueues/2)*300, 20.0}
+		dropPoint := fPoint{(screenWidth/2 - float64(tokenImg.Width)) + float64(i-numDropQueues/2)*300, 20.0}
 		tq := tokenQueue{
 			Tokens:       []*token{},
 			dropPosition: dropPoint,
@@ -253,6 +252,8 @@ func (c *Core) CheckForCollision(delta float64) {
 				b.vy = (drain * totalVelocity) / 2.0 * (dy / mag)
 				ot.vx = (drain * totalVelocity) / 2.0 * (-1.0 * dx / mag)
 				ot.vy = (drain * totalVelocity) / 2.0 * (-1.0 * dy / mag)
+
+				rl.PlaySoundMulti(c.sounds["boing"])
 				// c.sounds["boing"].Rewind()
 				// c.sounds["boing"].Play()
 			}
@@ -275,6 +276,9 @@ func (c *Core) CheckForCollision(delta float64) {
 				break
 			}
 			dx := b.x + b.radius - barrier.x
+
+			// which barrier are we closest to?
+
 			if dx > 0 {
 				px := b.x + b.radius + b.radius*math.Cos(3.926991)
 				py := b.y + b.radius - b.radius*math.Sin(3.926991)
@@ -285,10 +289,15 @@ func (c *Core) CheckForCollision(delta float64) {
 					nx := math.Cos(math.Pi / 4.0)
 					ny := -math.Sin(math.Pi / 4.0)
 
+					bbx, bby := barrier.bounds[0].x0, barrier.bounds[0].y0
+					nOffset := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(bbx), float32(bby)})
+					dist := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(px), float32(py)})
+					dist -= nOffset
 					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
 					r = scale(r, 0.6)
 					b.vx, b.vy = r.x, r.y
-					fmt.Println(b.vx, b.vy)
+					b.x += float64(-dist) * math.Cos(nx)
+					b.y -= float64(-dist) * -math.Sin(ny)
 				}
 			} else if dx < 0 {
 				px := b.x + b.radius + b.radius*math.Cos(5.497787)
@@ -299,9 +308,17 @@ func (c *Core) CheckForCollision(delta float64) {
 
 					nx := math.Cos(3 * math.Pi / 4.0)
 					ny := -math.Sin(3 * math.Pi / 4.0)
+
+					bbx, bby := barrier.bounds[1].x0, barrier.bounds[1].y0
+					nOffset := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(bbx), float32(bby)})
+					dist := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(px), float32(py)})
+					dist -= nOffset
+
 					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
 					r = scale(r, 0.6)
 					b.vx, b.vy = r.x, r.y
+					b.x -= float64(-dist) * math.Cos(nx)
+					b.y -= float64(-dist) * -math.Sin(ny)
 
 					fmt.Println(b.vx, b.vy)
 				}
@@ -360,6 +377,7 @@ func (c *Core) CheckForCollision(delta float64) {
 			b.falling = false
 			fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, c.rewardMultiplier)
+			physics.DestroyBody(c.tokens[idx].physBody)
 			c.tokens = removeBall(c.tokens, idx)
 		}
 	}
@@ -396,21 +414,22 @@ func (c *Core) Update() error {
 	return nil
 }
 
-func (c *Core) Draw(screen *ebiten.Image) {
+func (c *Core) Draw() {
 	for _, v := range c.tokens {
-		v.Draw(screen)
+		v.Draw()
 	}
 	for _, v := range c.pegs {
-		v.Draw(screen)
+		v.Draw()
 	}
 	for _, v := range c.barriers {
-		v.Draw(screen)
+		v.Draw()
 	}
 	for _, v := range c.goalZones {
-		v.Draw(screen)
+		v.Draw()
 	}
 	for k, v := range c.queues {
-		text.Draw(screen, fmt.Sprint(k), gameFont, int(v.dropPosition.x), int(v.dropPosition.y)+35, color.RGBA{0x00, 0xff, 0x00, 0xff})
+		//text.Draw(screen, , gameFont, int(v.dropPosition.x), int(v.dropPosition.y)+35, color.RGBA{0x00, 0xff, 0x00, 0xff})
+		rl.DrawText(fmt.Sprint(k), int32(v.dropPosition.x), int32(v.dropPosition.y)+35, 72, rl.Green)
 	}
 }
 
@@ -471,22 +490,25 @@ func generateBounds(screenWidth, screenHeight float64) []*box {
 }
 
 func generatePegs(screenWidth, screenHeight float64) []*peg {
-	pegImg, _, err := ebitenutil.NewImageFromFile("./images/plinko/token.png")
-	if err != nil {
-		log.Fatal(err)
-	}
+	pegImg := rl.LoadTexture("./images/plinko/token.png")
 	pegs := make([]*peg, numColumns*numRows)
-	halfImgWidth := float64(pegImg.Bounds().Dx()) / 2.0
+	halfImgWidth := float64(pegImg.Width) / 2.0
 	offset := 25.0
 	for i := 0; i < len(pegs); i++ {
 		if i%numColumns == 0 {
 			offset *= -1
 		}
+		x := (float64((i%numColumns)-numColumns/2)*100.0 + (screenWidth/2 - halfImgWidth)) + offset
+		y := float64(i/numColumns)*75.0 + 200.0
+		radius := float64(pegImg.Width) / 2.0
+		// body := physics.NewBodyCircle(rl.Vector2{X: float32(x), Y: float32(y)}, float32(radius), 1)
+		// body.Enabled = false
 		p := peg{
-			x:      (float64((i%numColumns)-numColumns/2)*100.0 + (screenWidth/2 - halfImgWidth)) + offset,
-			y:      float64(i/numColumns)*75.0 + 200.0,
-			radius: float64(pegImg.Bounds().Dx()) / 2.0,
+			x:      x,
+			y:      y,
+			radius: radius,
 			img:    pegImg,
+			//physBody: body,
 		}
 		pegs[i] = &p
 	}

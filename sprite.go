@@ -1,14 +1,12 @@
 package main
 
 import (
-	"log"
 	"math/rand"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/ebitenutil"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
-var sprites []*ebiten.Image
+var sprites []rl.Texture2D
 
 type Sprite struct {
 	draw     bool
@@ -21,7 +19,7 @@ type Sprite struct {
 	vx       float64
 	vy       float64
 	objScale float64
-	image    *ebiten.Image
+	image    rl.Texture2D
 }
 
 type Sprites struct {
@@ -31,29 +29,19 @@ type Sprites struct {
 	screenHeight int
 }
 
-func init() {
-	// load images
-	sprites = []*ebiten.Image{}
-	img, _, err := ebitenutil.NewImageFromFile("./images/BLUE_GOPHER.png")
-	if err != nil {
-		log.Fatal(err)
-	}
+func LoadSprites() {
+	sprites = []rl.Texture2D{}
+	img := rl.LoadTexture("./images/BLUE_GOPHER.png")
 	sprites = append(sprites, img)
 
-	img, _, err = ebitenutil.NewImageFromFile("./images/green_goph.png")
-	if err != nil {
-		log.Fatal(err)
-	}
+	img = rl.LoadTexture("./images/green_goph.png")
 	sprites = append(sprites, img)
 
-	img, _, err = ebitenutil.NewImageFromFile("./images/tux_goph.png")
-	if err != nil {
-		log.Fatal(err)
-	}
+	img = rl.LoadTexture("./images/tux_goph.png")
 	sprites = append(sprites, img)
 }
 
-func NewSprite(sprite *ebiten.Image) Sprite {
+func NewSprite(sprite rl.Texture2D) Sprite {
 	rvx := float64(rand.Intn(1280)) + 0.25
 	rvy := float64(rand.Intn(720)) + 0.25
 	return Sprite{
@@ -63,8 +51,8 @@ func NewSprite(sprite *ebiten.Image) Sprite {
 		scaleX:   1.0,
 		scaleY:   1.0,
 		objScale: 1.0,
-		width:    float64(sprite.Bounds().Dx()),
-		height:   float64(sprite.Bounds().Dy()),
+		width:    float64(sprite.Width),
+		height:   float64(sprite.Height),
 		vx:       rvx,
 		vy:       rvy,
 		image:    sprite,
@@ -90,12 +78,9 @@ func (o *Sprite) Update(delta float64) error {
 	return nil
 }
 
-func (o *Sprite) Draw(screen *ebiten.Image) {
+func (o *Sprite) Draw() {
 	if o.draw {
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(o.posX/o.objScale, o.posY/o.objScale)
-		op.GeoM.Scale(o.objScale, o.objScale)
-		screen.DrawImage(o.image, op)
+		rl.DrawTextureEx(o.image, rl.Vector2{X: float32(o.posX), Y: float32(o.posY)}, 0, float32(o.objScale), rl.White)
 	}
 }
 

@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
 
 	texttospeech "cloud.google.com/go/texttospeech/apiv1"
-	"github.com/MattSwanson/ebiten/v2/audio"
-	"github.com/MattSwanson/ebiten/v2/audio/mp3"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 	texttospeechpb "google.golang.org/genproto/googleapis/cloud/texttospeech/v1"
 )
 
@@ -16,21 +14,15 @@ const (
 	ttsSampleRate = 44100
 )
 
-func speak(audioContext *audio.Context, txt string) error {
+func speak(txt string) error {
 	audioBytes, err := getTTS(txt)
 	if err != nil {
 		log.Println("Couldn't get TTS: ", err.Error())
 		return err
 	}
-	ws, err := mp3.DecodeWithSampleRate(ttsSampleRate, bytes.NewReader(audioBytes))
-	if err != nil {
-		return err
-	}
-	player, err := audio.NewPlayer(audioContext, ws)
-	if err != nil {
-		return err
-	}
-	player.Play()
+	wave := rl.NewWave(uint32(len(audioBytes)/2), ttsSampleRate, 16, 1, audioBytes[44:])
+	sound := rl.LoadSoundFromWave(wave)
+	rl.PlaySoundMulti(sound)
 	return nil
 }
 
@@ -58,7 +50,8 @@ func getTTS(txt string) ([]byte, error) {
 		},
 		// select the type of audio you want returned
 		AudioConfig: &texttospeechpb.AudioConfig{
-			AudioEncoding: texttospeechpb.AudioEncoding_MP3,
+			AudioEncoding:   texttospeechpb.AudioEncoding_LINEAR16,
+			SampleRateHertz: 44100,
 		},
 	}
 

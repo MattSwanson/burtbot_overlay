@@ -3,7 +3,7 @@ package plinko
 import (
 	"image/color"
 
-	"github.com/MattSwanson/ebiten/v2"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 type box struct {
@@ -11,14 +11,15 @@ type box struct {
 	y   float64
 	w   float64
 	h   float64
-	img *ebiten.Image
+	img rl.Texture2D
 }
 
 func NewBox(bounds fRect, color color.RGBA) *box {
-	img := ebiten.NewImage(int(bounds.Dx()), int(bounds.Dy()))
-	img.Fill(color)
+	// img := rl.NewImage(int(bounds.Dx()), int(bounds.Dy()))
+	// img.Fill(color)
+	img := rl.GenImageColor(int(bounds.Dx()), int(bounds.Dy()), rl.Color{R: color.R, G: color.G, B: color.B, A: color.A})
 	return &box{
-		img: img,
+		img: rl.LoadTextureFromImage(img),
 		x:   float64(bounds.min.x),
 		y:   float64(bounds.min.y),
 		w:   float64(bounds.Dx()),
@@ -26,8 +27,6 @@ func NewBox(bounds fRect, color color.RGBA) *box {
 	}
 }
 
-func (b *box) Draw(screen *ebiten.Image) {
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(b.x, b.y)
-	screen.DrawImage(b.img, op)
+func (b *box) Draw() {
+	rl.DrawTexture(b.img, int32(b.x), int32(b.y), rl.White)
 }

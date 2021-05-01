@@ -1,11 +1,10 @@
 package plinko
 
 import (
-	"image/color"
 	"math/rand"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/text"
+	"github.com/MattSwanson/raylib-go/physics"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
@@ -20,13 +19,14 @@ type token struct {
 	vx          float64
 	vy          float64
 	radius      float64
-	img         *ebiten.Image
+	img         rl.Texture2D
 	playerName  string
 	labelOffset fPoint
+	physBody    *physics.Body
 }
 
-func NewToken(playerName string, img *ebiten.Image, pos fPoint) *token {
-	radius := float64(img.Bounds().Dx()) / 2.0
+func NewToken(playerName string, img rl.Texture2D, pos fPoint) *token {
+	radius := float64(img.Width) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	return &token{
 		mass:        tokenMass,
@@ -50,14 +50,12 @@ func (b *token) Update(delta float64) {
 	}
 }
 
-func (b *token) Draw(screen *ebiten.Image) {
+func (b *token) Draw() {
 	if !b.falling {
 		return
 	}
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(b.x, b.y)
-	screen.DrawImage(b.img, op)
-	text.Draw(screen, b.playerName, playerLabelFont, int(b.x+b.labelOffset.x), int(b.y+b.labelOffset.y), color.RGBA{0x00, 0xff, 0x00, 0xff})
+	rl.DrawTexture(b.img, int32(b.x), int32(b.y), rl.White)
+	rl.DrawText(b.playerName, int32(b.x+b.labelOffset.x), int32(b.y+b.labelOffset.y), 18, rl.Green)
 }
 
 func (b *token) Release() {

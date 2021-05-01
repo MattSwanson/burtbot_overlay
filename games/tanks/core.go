@@ -2,16 +2,13 @@ package tanks
 
 import (
 	"fmt"
-	"image/color"
 	"log"
 	"math"
 	"os"
 	"time"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/audio"
-	"github.com/MattSwanson/ebiten/v2/ebitenutil"
-	"github.com/MattSwanson/ebiten/v2/text"
+	rl "github.com/MattSwanson/raylib-go/raylib"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
@@ -20,13 +17,13 @@ var playerLabelFont font.Face
 var instFont font.Face
 var winnerFont font.Face
 var xspawns = []int{}
-var boomImg *ebiten.Image
+var boomImg rl.Texture2D
 
 type Core struct {
 	tanks         []*tank
 	currentTurn   int
 	playersJoined int
-	terrainImg    *ebiten.Image
+	terrainImg    rl.Texture2D
 	heightMap     []float64
 	screenWidth   int
 	screenHeight  int
@@ -35,15 +32,15 @@ type Core struct {
 	gameStarted   bool
 	gameOver      bool
 	winner        string
-	winnerImg     *ebiten.Image
+	winnerImg     rl.Texture2D
 	showBoom      bool
 	boomX         float64
 	boomY         float64
 	boomTime      time.Time
-	sounds        map[string]*audio.Player
+	sounds        map[string]rl.Sound
 }
 
-func Load(sWidth, sHeight int, sounds map[string]*audio.Player) *Core {
+func Load(sWidth, sHeight int, sounds map[string]rl.Sound) *Core {
 	bs, err := os.ReadFile("caskaydia.TTF")
 	if err != nil {
 		log.Fatal(err)
@@ -78,10 +75,7 @@ func Load(sWidth, sHeight int, sounds map[string]*audio.Player) *Core {
 		log.Fatal(err)
 	}
 
-	boomImg, _, err = ebitenutil.NewImageFromFile("./images/tanks/tanks_boom.png")
-	if err != nil {
-		log.Fatal(err)
-	}
+	boomImg = rl.LoadTexture("./images/tanks/tanks_boom.png")
 
 	tanks := []*tank{}
 	terrain, heightMap := generateTerrain(sWidth, sHeight)
@@ -101,30 +95,12 @@ func Load(sWidth, sHeight int, sounds map[string]*audio.Player) *Core {
 }
 
 func (c *Core) PlaceTank(num int) {
-	var y float64
-	for j := 0; j < c.screenHeight; j++ {
-		// find the first 0x00 alpha pixel
-		if _, _, _, a := c.terrainImg.At(xspawns[num], j+int(c.tanks[num].w)).RGBA(); a > 0 {
-			y = float64(j)
-			break
-		}
-	}
-	xpos := float64(xspawns[num]) - c.tanks[num].w/2.0
-	var ymo, ypo int
-	for j := 0; j < c.screenHeight; j++ {
-		if _, _, _, a := c.terrainImg.At(xspawns[num]-20, j+int(c.tanks[num].w)).RGBA(); a > 0 {
-			ymo = j
-			break
-		}
-	}
-	for j := 0; j < c.screenHeight; j++ {
-		if _, _, _, a := c.terrainImg.At(xspawns[num]+20, j+int(c.tanks[num].w)).RGBA(); a > 0 {
-			ypo = j
-			break
-		}
-	}
-	s := float64(ymo-ypo) / 40
-	c.tanks[num].setAngle(math.Atan(s))
+	y := c.heightMap[xspawns[num]]
+	xpos := float64(xspawns[num])
+	ymo := c.heightMap[xspawns[num]-20]
+	ypo := c.heightMap[xspawns[num]+20]
+	s := (ymo - ypo) / 40
+	c.tanks[num].setAngle(-math.Atan(s))
 	c.tanks[num].setPosition(xpos, y)
 }
 
@@ -138,32 +114,28 @@ func (c *Core) advanceTurn(i int) {
 	}
 }
 
-func (c *Core) Draw(screen *ebiten.Image) {
-	screen.DrawImage(c.terrainImg, nil)
+func (c *Core) Draw() {
+	rl.DrawTexture(c.terrainImg, 0, 0, rl.White)
 	for _, tank := range c.tanks {
-		tank.Draw(screen)
+		tank.Draw()
 	}
 	if c.projectile != nil {
-		c.projectile.Draw(screen)
+		c.projectile.Draw()
 	}
 	if c.showBoom {
-		op := ebiten.DrawImageOptions{}
-		op.GeoM.Translate(c.boomX, c.boomY)
-		screen.DrawImage(boomImg, &op)
+		rl.DrawTexture(boomImg, int32(c.boomX), int32(c.boomY), rl.White)
 	}
 	if c.gameStarted {
 		s := fmt.Sprintf("%s's [%d] turn. !tanks shoot <angle> <velocity>", c.tanks[c.currentTurn].playerName, c.currentTurn)
-		text.Draw(screen, s, instFont, 75, 1350, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
+		rl.DrawText(s, 75, 1350, 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
 	} else {
-		text.Draw(screen, "type '!tanks join' to join the game!", instFont, 75, 1350, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
+		rl.DrawText("type '!tanks join' to join the game!", 75, 1350, 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
 	}
-	// draw a wind indicator
+	// // draw a wind indicator
 	if c.gameOver {
 		s := fmt.Sprintf("%s is the winner!", c.winner)
-		text.Draw(screen, s, winnerFont, 410, c.screenHeight/2, color.RGBA{0x00, 0xFF, 0x00, 0xFF})
-		op := ebiten.DrawImageOptions{}
-		op.GeoM.Translate(100.0, float64(c.screenHeight)/2-float64(c.winnerImg.Bounds().Dy())/2)
-		screen.DrawImage(c.winnerImg, &op)
+		rl.DrawText(s, 410, int32(c.screenHeight/2), 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
+		rl.DrawTexture(c.winnerImg, 100, int32(c.screenHeight/2-int(float32(c.winnerImg.Width)/2.0)), rl.White)
 	}
 }
 
@@ -225,7 +197,7 @@ func (c *Core) Update(delta float64) error {
 			cpy := c.projectile.y + radius*math.Sin(float64(i)*2.0/4.0*math.Pi)
 			if tank.bounds[0].IsLeft(cpx, cpy) > 0 && tank.bounds[1].IsLeft(cpx, cpy) > 0 && tank.bounds[2].IsLeft(cpx, cpy) > 0 && tank.bounds[3].IsLeft(cpx, cpy) > 0 {
 				c.projectile = nil
-				c.boomX, c.boomY = tank.cx-float64(boomImg.Bounds().Dx())/2, tank.cy-float64(boomImg.Bounds().Dy())/2
+				c.boomX, c.boomY = tank.cx-float64(boomImg.Width)/2, tank.cy-float64(boomImg.Width)/2
 				c.boomTime = time.Now()
 				c.showBoom = true
 				go func() {
@@ -239,12 +211,10 @@ func (c *Core) Update(delta float64) error {
 					c.winnerImg = c.tanks[0].img
 					c.gameOver = true
 					c.gameStarted = false
-					c.sounds["indigo"].Rewind()
-					c.sounds["indigo"].Play()
+					rl.PlaySoundMulti(c.sounds["indigo"])
 					return nil
 				} else {
-					c.sounds["sosumi"].Rewind()
-					c.sounds["sosumi"].Play()
+					rl.PlaySoundMulti(c.sounds["sosumi"])
 				}
 				c.advanceTurn(v)
 				return nil
@@ -261,14 +231,16 @@ func (c *Core) Update(delta float64) error {
 
 	// ground collision
 	for i := 0; i < 6; i++ {
-		// projectile.x + radius * cos(i * 2pi/6)
-		// projectile.y + radius * sin(i * 2pi/6)
+		// find the x center of the projectile from the top left corner (origin)
 		cpx := int(c.projectile.x + radius*math.Cos(float64(i)*2.0/6.0*math.Pi))
 		if cpx < 0 || cpx > 2560 {
 			break
 		}
+		// then the y center
 		cpy := c.projectile.y + radius*math.Sin(float64(i)*2.0/6.0*math.Pi)
+		// if the y position is lower than the height of the terrain at that x pos...
 		if cpy >= c.heightMap[cpx] {
+			// thunk
 			c.projectile = nil
 			c.advanceTurn(-1)
 			return nil
@@ -294,7 +266,7 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 	if !c.gameStarted || player != c.tanks[c.currentTurn].playerName {
 		return
 	}
-	angle = angle*math.Pi/180.0 + c.tanks[c.currentTurn].a
+	angle = angle*math.Pi/180.0 - c.tanks[c.currentTurn].a
 	pSpawnOffsetX := math.Cos(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
 	pSpawnOffsetY := math.Sin(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
 	c.tanks[c.currentTurn].lastShotAngle = angle
@@ -312,7 +284,7 @@ func (c *Core) AddPlayer(playerName string, imgURL string) {
 		return
 	}
 	t := NewTank(playerName, imgURL)
-	t.setPosition(0, t.h*float64(c.playersJoined))
+	t.setPosition(0+t.w/2, t.h*float64(c.playersJoined)+t.h)
 	c.tanks = append(c.tanks, t)
 	c.playersJoined++
 }
@@ -322,7 +294,8 @@ func (c *Core) Begin() {
 		return
 	}
 
-	// generate xpos
+	// generate starting x positions based on number of
+	// players
 	xspawns = []int{300}
 	if c.playersJoined > 2 {
 		gap := 1960 / (c.playersJoined - 1)

@@ -2,15 +2,10 @@ package main
 
 import (
 	"fmt"
-	"image/color"
 	"math/rand"
 	"time"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/audio"
-	"github.com/MattSwanson/ebiten/v2/ebitenutil"
-	"github.com/MattSwanson/ebiten/v2/inpututil"
-	"github.com/MattSwanson/ebiten/v2/text"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
@@ -43,14 +38,14 @@ type Snake struct {
 	score         int
 	bestScore     int
 	level         int
-	sounds        map[string]*audio.Player
+	sounds        map[string]rl.Sound
 }
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func newSnake(sounds map[string]*audio.Player) *Snake {
+func newSnake(sounds map[string]rl.Sound) *Snake {
 	s := &Snake{
 		apple:     Position{X: gridSize, Y: gridSize},
 		moveTime:  initialMoveSpeed,
@@ -100,16 +95,16 @@ func (s *Snake) reset() {
 	s.moveDirection = dirNone
 }
 
-func (s *Snake) Update(currentInput ebiten.Key) error {
-	if inpututil.IsKeyJustPressed(ebiten.KeyLeft) || currentInput == ebiten.KeyLeft {
+func (s *Snake) Update(currentInput int) error {
+	if rl.IsKeyPressed(rl.KeyLeft) || currentInput == rl.KeyLeft {
 		s.nextMove = dirLeft
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyRight) || currentInput == ebiten.KeyRight {
+	} else if rl.IsKeyPressed(rl.KeyRight) || currentInput == rl.KeyRight {
 		s.nextMove = dirRight
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyDown) || currentInput == ebiten.KeyDown {
+	} else if rl.IsKeyPressed(rl.KeyDown) || currentInput == rl.KeyDown {
 		s.nextMove = dirDown
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyUp) || currentInput == ebiten.KeyUp {
+	} else if rl.IsKeyPressed(rl.KeyUp) || currentInput == rl.KeyUp {
 		s.nextMove = dirUp
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+	} else if rl.IsKeyPressed(rl.KeyEscape) {
 		s.reset()
 	}
 
@@ -125,14 +120,12 @@ func (s *Snake) Update(currentInput ebiten.Key) error {
 		}
 
 		if s.collidesWithSelf() {
-			s.sounds["zap"].Rewind()
-			s.sounds["zap"].Play()
+			rl.PlaySoundMulti(s.sounds["zap"])
 			s.reset()
 		}
 
 		if s.collidesWithApple() {
-			s.sounds["squeek"].Rewind()
-			s.sounds["squeek"].Play()
+			rl.PlaySoundMulti(s.sounds["squeek"])
 			s.apple.X = rand.Intn(xNumInScreen - 1)
 			s.apple.Y = rand.Intn(yNumInScreen - 1)
 			s.snakeBody = append(s.snakeBody, Position{
@@ -181,23 +174,28 @@ func (s *Snake) Update(currentInput ebiten.Key) error {
 	return nil
 }
 
-func (s *Snake) Draw(screen *ebiten.Image) {
+func (s *Snake) Draw() {
 	for _, v := range s.snakeBody {
-		ebitenutil.DrawRect(screen, float64(v.X*gridSize), float64(v.Y*gridSize), gridSize, gridSize, color.RGBA{0x00, 0xff, 0x00, 0xff})
+		// ebitenutil.DrawRect(screen, float64(v.X*gridSize), float64(v.Y*gridSize), gridSize, gridSize, color.RGBA{0x00, 0xff, 0x00, 0xff})
+		rl.DrawRectangle(int32(v.X*gridSize), int32(v.Y*gridSize), gridSize, gridSize, rl.Color{R: 0x00, G: 0xff, B: 0x00, A: 0xff})
 	}
-	ebitenutil.DrawRect(screen, float64(s.apple.X*gridSize), float64(s.apple.Y*gridSize), gridSize, gridSize, color.RGBA{0xFF, 0x00, 0x00, 0xff})
-
+	// ebitenutil.DrawRect(screen, float64(s.apple.X*gridSize), float64(s.apple.Y*gridSize), gridSize, gridSize, color.RGBA{0xFF, 0x00, 0x00, 0xff})
+	rl.DrawRectangle(int32(s.apple.X*gridSize), int32(s.apple.Y*gridSize), gridSize, gridSize, rl.Color{R: 0xff, G: 0x00, B: 0x00, A: 0xff})
 	if s.moveDirection == dirNone {
 		instStr := "w, a, s or d to start"
-		b := text.BoundString(myFont, instStr)
-		textX := screenWidth/2 - b.Dx()/2
-		textY := screenHeight/2 - b.Dy()/2
-		text.Draw(screen, instStr, myFont, textX, textY, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-		text.Draw(screen, instStr, myFont, textX+1, textY+1, color.RGBA{0, 0xFF, 0, 0xFF})
+		b := rl.MeasureTextEx(rl.GetFontDefault(), instStr, 96, 0)
+		textX := screenWidth/2 - b.X/2
+		textY := screenHeight/2 - b.Y/2
+		//text.Draw(screen, instStr, myFont, textX, textY, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
+		rl.DrawText(instStr, int32(textX), int32(textY), 96, rl.White)
+		rl.DrawText(instStr, int32(textX+1), int32(textY+1), 96, rl.Green)
+		//text.Draw(screen, instStr, myFont, textX+1, textY+1, color.RGBA{0, 0xFF, 0, 0xFF})
 	} else {
 		s := fmt.Sprintf("Level: %d Score: %d Best Score: %d", s.level, s.score, s.bestScore)
-		text.Draw(screen, s, myFont, 25, 25, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-		text.Draw(screen, s, myFont, 25, 25, color.RGBA{0, 0xFF, 0, 0xFF})
+		//text.Draw(screen, s, myFont, 25, 25, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
+		rl.DrawText(s, 25, 25, 96, rl.White)
+		rl.DrawText(s, 26, 26, 96, rl.Green)
+		//text.Draw(screen, s, myFont, 25, 25, color.RGBA{0, 0xFF, 0, 0xFF})
 	}
 }
 

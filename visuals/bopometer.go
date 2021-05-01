@@ -2,116 +2,64 @@ package visuals
 
 import (
 	"fmt"
-	"image/color"
-	"log"
 	"math"
 	"math/rand"
-	"os"
 	"time"
 
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/ebitenutil"
-	"github.com/MattSwanson/ebiten/v2/text"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
-
-func init() {
-	// font init
-	bs, err := os.ReadFile("caskaydia.TTF")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tt, err := opentype.Parse(bs)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	const dpi = 72
-	bopFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    96,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	bigBopFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    256,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	img, _, err := ebitenutil.NewImageFromFile("./images/bopM.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	mediumBop = img
-
-	img, _, err = ebitenutil.NewImageFromFile("./images/bopL.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	largeBop = img
-
-	img, _, err = ebitenutil.NewImageFromFile("./images/bopometer_bg.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	bg = img
-}
 
 const (
-	gravity    = 700
-	finalLabel = "Final Rating:"
+	gravity       = 700
+	textSize      = 96
+	largeTextSize = 256
+	finalLabel    = "Final Rating:"
 )
 
-var bopFont font.Face
-var bigBopFont font.Face
-var mediumBop *ebiten.Image
-var largeBop *ebiten.Image
-var bg *ebiten.Image
+var bopFont rl.Font
+var mediumBop rl.Texture2D
+var largeBop rl.Texture2D
+var bg rl.Texture2D
 var finalLabelX int
 
 type Bopometer struct {
-	currentRating float64
+	currentRating float32
 	totalBops     int
 	running       bool
 	finished      bool
 	bops          []*bop
-	bopIndicatorY float64
+	bopIndicatorY float32
 	writeChannel  chan string
 }
 
+func LoadBopometerAssets() {
+	mediumBop = rl.LoadTexture("./images/bopM.png")
+	largeBop = rl.LoadTexture("./images/bopL.png")
+	bg = rl.LoadTexture("./images/bopometer_bg.png")
+	bopFont = rl.LoadFont("caskaydia.TTF")
+}
+
 func NewBopometer(wc chan string) *Bopometer {
-	finalLabelX = int(text.BoundString(bopFont, finalLabel).Dx() / 2)
+	finalLabelX = int(rl.MeasureTextEx(bopFont, finalLabel, 96, 0).X / 2)
 	return &Bopometer{bops: []*bop{}, writeChannel: wc}
 }
 
-func (b *Bopometer) Draw(screen *ebiten.Image) {
+func (b *Bopometer) Draw() {
 	const textYOffset = 35.0
 	const textX = 200.0
-	const bopIndicatorX = 135.0
+	const bopIndicatorX = 200.0
 	if b.running {
-		screen.DrawImage(bg, nil)
-		op := ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-float64(largeBop.Bounds().Dx())/2, -float64(largeBop.Bounds().Dy())/2)
-		op.GeoM.Rotate(math.Pi/2 + 0.1)
-		op.GeoM.Translate(bopIndicatorX, b.bopIndicatorY)
-		screen.DrawImage(largeBop, &op)
-		op.GeoM.Reset()
-		text.Draw(screen, fmt.Sprintf("%.2f", b.currentRating), bopFont, textX, int(b.bopIndicatorY)+textYOffset, color.RGBA{0xff, 0x00, 0x00, 0xff})
+		rl.DrawTexture(bg, 0, 0, rl.White)
+		rl.DrawTextureEx(largeBop, rl.Vector2{X: bopIndicatorX, Y: b.bopIndicatorY}, 90, 1, rl.White)
+		txtPos := rl.Vector2{X: textX, Y: b.bopIndicatorY + textYOffset}
+		rl.DrawTextEx(bopFont, fmt.Sprintf("%.2f", b.currentRating), txtPos, textSize, 0, rl.Red)
 		for _, bp := range b.bops {
-			bp.Draw(screen)
+			bp.Draw()
 		}
 	}
 	if b.finished {
-		text.Draw(screen, finalLabel, bopFont, finalLabelX, 400, color.RGBA{0xff, 0x00, 0x00, 0xff})
-		text.Draw(screen, fmt.Sprintf("%.2f", b.currentRating), bigBopFont, 800, 720, color.RGBA{0xff, 0x00, 0x00, 0xff})
+		rl.DrawTextEx(bopFont, finalLabel, rl.Vector2{X: float32(finalLabelX), Y: 400}, largeTextSize, 0, rl.Red)
+		rl.DrawTextEx(bopFont, fmt.Sprintf("%.2f", b.currentRating), rl.Vector2{X: 800, Y: 720}, largeTextSize, 0, rl.Red)
 	}
 }
 
@@ -174,7 +122,7 @@ type bop struct {
 	vy  float64
 	a   float64
 	va  float64
-	img *ebiten.Image
+	img rl.Texture2D
 }
 
 func (b *bop) Update(delta float64) {
@@ -184,11 +132,8 @@ func (b *bop) Update(delta float64) {
 	b.a += b.va * delta / 1000
 }
 
-func (b *bop) Draw(screen *ebiten.Image) {
-	op := ebiten.DrawImageOptions{}
-	op.GeoM.Rotate(b.a)
-	op.GeoM.Translate(b.x, b.y)
-	screen.DrawImage(b.img, &op)
+func (b *bop) Draw() {
+	rl.DrawTextureEx(b.img, rl.Vector2{X: float32(b.x), Y: float32(b.y)}, float32(b.a)*180/math.Pi, 1, rl.White)
 }
 
 func (b *bop) SetVelocity(x, y, a float64) {
@@ -205,7 +150,7 @@ func spawnBop() *bop {
 
 // calculateRating will translate the number of bops given
 // to its bopometer rating
-func calculateRating(numBops int) float64 {
+func calculateRating(numBops int) float32 {
 	switch {
 	case numBops == 0:
 		return 0.0
@@ -214,19 +159,19 @@ func calculateRating(numBops int) float64 {
 	case numBops < 3:
 		return 2.0
 	case numBops < 7:
-		return 3.0 + (float64(numBops)-3.0)/4.0
+		return 3.0 + (float32(numBops)-3.0)/4.0
 	case numBops < 11:
-		return 4.0 + (float64(numBops)-7.0)/4.0
+		return 4.0 + (float32(numBops)-7.0)/4.0
 	case numBops < 100:
-		return 5.0 + (float64(numBops)-11.0)/89.0
+		return 5.0 + (float32(numBops)-11.0)/89.0
 	case numBops < 1000:
-		return 6.0 + (float64(numBops)-100.0)/900.0
+		return 6.0 + (float32(numBops)-100.0)/900.0
 	case numBops < 10000:
-		return 7.0 + (float64(numBops)-1000.0)/9000.0
+		return 7.0 + (float32(numBops)-1000.0)/9000.0
 	case numBops < 100000:
-		return 8.0 + (float64(numBops)-10000.0)/90000.0
+		return 8.0 + (float32(numBops)-10000.0)/90000.0
 	case numBops < 1000000:
-		return 9.0 + (float64(numBops)-100000.0)/900000.0
+		return 9.0 + (float32(numBops)-100000.0)/900000.0
 	default:
 		return 10.0
 	}

@@ -1,9 +1,7 @@
 package tanks
 
 import (
-	"image/color"
-
-	"github.com/MattSwanson/ebiten/v2"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const gravity float64 = 500.0
@@ -15,18 +13,17 @@ type projectile struct {
 	vx     float64
 	vy     float64
 	radius float64
-	img    *ebiten.Image
+	img    rl.Texture2D
 	wv     float64
 	marker bool
 }
 
 func NewProjectile(x, y float64, wind float64, marker bool) *projectile {
-	img := ebiten.NewImage(int(radius*2), int(radius*2))
-	img.Fill(color.RGBA{0xff, 0x00, 0x00, 0xff})
+	img := rl.GenImageColor(int(radius*2), int(radius*2), rl.Color{R: 255, G: 0, B: 0, A: 255})
 	return &projectile{
 		x:      x,
 		y:      y,
-		img:    img,
+		img:    rl.LoadTextureFromImage(img),
 		wv:     wind,
 		radius: radius,
 		marker: marker,
@@ -43,10 +40,8 @@ func (p *projectile) Update(delta float64) {
 	p.y += p.vy * delta / 1000.0
 }
 
-func (p *projectile) Draw(screen *ebiten.Image) {
-	op := ebiten.DrawImageOptions{}
-	op.GeoM.Translate(p.x-radius, p.y-radius)
-	screen.DrawImage(p.img, &op)
+func (p *projectile) Draw() {
+	rl.DrawTexture(p.img, int32(p.x), int32(p.y), rl.Red)
 }
 
 func (p *projectile) SetVelocity(x, y float64) {

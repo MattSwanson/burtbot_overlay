@@ -6,32 +6,30 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"image"
 	"image/color"
 	_ "image/png"
 	"log"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
-	"github.com/MattSwanson/ebiten/v2"
-	"github.com/MattSwanson/ebiten/v2/audio"
-	"github.com/MattSwanson/ebiten/v2/audio/wav"
-	"github.com/MattSwanson/ebiten/v2/ebitenutil"
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
+
+	"github.com/MattSwanson/raylib-go/physics"
+	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 //var startTime time.Time
 var ga Game
 var myFont font.Face
-var mwhipImg *ebiten.Image
+
+var mwhipImg rl.Texture2D
 
 const (
 	audioSampleRate         = 44100
@@ -39,107 +37,71 @@ const (
 )
 
 func init() {
-	var err error
+	//var err error
 	//audio init
-	ga.audioContext = audio.NewContext(44100)
-	ga.showStatic = false
-	ga.staticLayer = static{noiseImage: image.NewRGBA(image.Rect(0, 0, screenWidth, screenHeight))}
-	ga.sounds = map[string]*audio.Player{}
-	ga.sounds["eep"], err = initSound(ga.audioContext, "sounds/wildeep.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["whit"], err = initSound(ga.audioContext, "sounds/Whit.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["boing"], err = initSound(ga.audioContext, "sounds/Boing.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["quack"], err = initSound(ga.audioContext, "sounds/Quack.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["zap"], err = initSound(ga.audioContext, "sounds/Voltage.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["logjam"], err = initSound(ga.audioContext, "sounds/Logjam.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["bip"], err = initSound(ga.audioContext, "sounds/Bip.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["squeek"], err = initSound(ga.audioContext, "sounds/ChuToy.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["indigo"], err = initSound(ga.audioContext, "sounds/Indigo.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ga.sounds["sosumi"], err = initSound(ga.audioContext, "sounds/Sosumi.wav")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// ga.audioContext = audio.NewContext(44100)
+	// ga.showStatic = false
+	// ga.staticLayer = static{noiseImage: image.NewRGBA(image.Rect(0, 0, screenWidth, screenHeight))}
+	ga.sounds = map[string]rl.Sound{}
+	ga.sounds["eep"] = rl.LoadSound("sounds/wildeep.wav")
+	ga.sounds["whit"] = rl.LoadSound("sounds/Whit.wav")
+	ga.sounds["boing"] = rl.LoadSound("sounds/Boing.wav")
+	ga.sounds["quack"] = rl.LoadSound("sounds/Quack.wav")
+	ga.sounds["zap"] = rl.LoadSound("sounds/Voltage.wav")
+	ga.sounds["logjam"] = rl.LoadSound("sounds/Logjam.wav")
+	ga.sounds["bip"] = rl.LoadSound("sounds/Bip.wav")
+	ga.sounds["squeek"] = rl.LoadSound("sounds/ChuToy.wav")
+	ga.sounds["indigo"] = rl.LoadSound("sounds/Indigo.wav")
+	ga.sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
 
-	mwhipImg, _, err = ebitenutil.NewImageFromFile("./images/mwhip.png")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// // font init
+	// bs, err := os.ReadFile("caskaydia.TTF")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// tt, err := opentype.Parse(bs)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// const dpi = 72
+	// myFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+	// 	Size:    36,
+	// 	DPI:     dpi,
+	// 	Hinting: font.HintingFull,
+	// })
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	// font init
-	bs, err := os.ReadFile("caskaydia.TTF")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tt, err := opentype.Parse(bs)
-	if err != nil {
-		log.Fatal(err)
-	}
-	const dpi = 72
-	myFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    36,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ga.marquees = []*Marquee{}
+	// ga.marquees = []*Marquee{}
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
 	//startTime = time.Now()
 }
 
-func initSound(ctx *audio.Context, fileName string) (*audio.Player, error) {
-	file, err := os.Open(fileName)
-	if err != nil {
-		return nil, err
-	}
-	ws, err := wav.DecodeWithSampleRate(audioSampleRate, file)
-	if err != nil {
-		return nil, err
-	}
-	player, err := audio.NewPlayer(ctx, ws)
-	if err != nil {
-		return nil, err
-	}
-	player.SetVolume(soundVolume)
-	return player, nil
-}
+// func initSound(ctx *audio.Context, fileName string) (*audio.Player, error) {
+// 	file, err := os.Open(fileName)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	ws, err := wav.DecodeWithSampleRate(audioSampleRate, file)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	player, err := audio.NewPlayer(ctx, ws)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	player.SetVolume(soundVolume)
+// 	return player, nil
+// }
 
 type Game struct {
 	sprites         Sprites
 	commChannel     chan cmd
 	connWriteChan   chan string
-	audioContext    *audio.Context
-	sounds          map[string]*audio.Player
+	sounds          map[string]rl.Sound
 	showStatic      bool
 	staticLayer     static
 	gameRunning     bool
@@ -148,9 +110,11 @@ type Game struct {
 	plinkoRunning   bool
 	tanks           *tanks.Core
 	tanksRunning    bool
-	currentInput    ebiten.Key
+	lightsout       *lightsout.Core
+	lightsRunning   bool
+	currentInput    int
 	bigMouse        bool
-	bigMouseImg     *ebiten.Image
+	bigMouseImg     rl.Texture2D
 	marquees        []*Marquee
 	marqueesEnabled bool
 	bopometer       *visuals.Bopometer
@@ -179,6 +143,7 @@ const (
 	TanksCmd
 	BopCmd
 	MiracleCmd
+	LightsOutCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -197,34 +162,36 @@ var connMessages = []string{
 	"borkbonk haircut motivated",
 }
 
-func (g *Game) Update() error {
+func (g *Game) Update() {
 	delta := float64(time.Since(g.lastUpdate).Milliseconds())
+	physics.Update()
 	select {
 	case key := <-g.commChannel:
 		switch key.command {
-		case int(ebiten.KeyUp):
-			g.currentInput = ebiten.KeyUp
-			if g.sprites.num != 0 {
-				g.sprites.sprites[0].posY -= 4.0
-			}
-		case int(ebiten.KeyDown):
-			g.currentInput = ebiten.KeyDown
-			if g.sprites.num != 0 {
-				g.sprites.sprites[0].posY += 4.0
-			}
-		case int(ebiten.KeyLeft):
-			g.currentInput = ebiten.KeyLeft
-			if g.sprites.num != 0 {
-				g.sprites.sprites[0].posX -= 4.0
-			}
-		case int(ebiten.KeyRight):
-			g.currentInput = ebiten.KeyRight
-			if g.sprites.num != 0 {
-				g.sprites.sprites[0].posX += 4.0
-			}
+		case int(rl.KeyUp):
+			g.currentInput = rl.KeyUp
+		// 	if g.sprites.num != 0 {
+		// 		g.sprites.sprites[0].posY -= 4.0
+		// 	}
+		case int(rl.KeyDown):
+			g.currentInput = rl.KeyDown
+		// 	if g.sprites.num != 0 {
+		// 		g.sprites.sprites[0].posY += 4.0
+		// 	}
+		case int(rl.KeyLeft):
+			g.currentInput = rl.KeyLeft
+		// 	if g.sprites.num != 0 {
+		// 		g.sprites.sprites[0].posX -= 4.0
+		// 	}
+		case int(rl.KeyRight):
+			g.currentInput = rl.KeyRight
+		// 	if g.sprites.num != 0 {
+		// 		g.sprites.sprites[0].posX += 4.0
+		// 	}
+
 		case SpawnGopher:
 			if num, err := strconv.Atoi(key.args[0]); err != nil {
-				return nil
+				return
 			} else {
 				g.newGopher(num)
 			}
@@ -234,7 +201,7 @@ func (g *Game) Update() error {
 			g.showGopher()
 		case SizeGopher:
 			if size, err := strconv.ParseFloat(key.args[0], 64); err != nil {
-				return nil
+				return
 			} else {
 				g.setGopherSize(size)
 			}
@@ -242,7 +209,7 @@ func (g *Game) Update() error {
 			g.destroyGophers()
 		case Quack:
 			if n, err := strconv.Atoi(key.args[0]); err != nil {
-				return nil
+				return
 			} else {
 				g.quack(n)
 			}
@@ -263,7 +230,7 @@ func (g *Game) Update() error {
 			if key.args[0] == "off" {
 				g.marqueesEnabled = false
 				g.marquees = []*Marquee{}
-				return nil
+				return
 			}
 			// } else if key.args[0] == "embiggen" {
 			// 	g.marquee.Embiggen()
@@ -283,7 +250,7 @@ func (g *Game) Update() error {
 			g.marquees = append(g.marquees, m)
 			g.marqueesEnabled = true
 		case TTS:
-			go speak(g.audioContext, key.args[0])
+			go speak(key.args[0])
 		case PlinkoCmd:
 			// !plinko start - this will start the game
 			// keep alive for 60 seconds with no drops
@@ -297,7 +264,7 @@ func (g *Game) Update() error {
 				// drop a token at drop position n for the given username
 				if key.args[0] == "drop" {
 					if len(key.args) < 3 {
-						return nil
+						return
 					}
 					// make sure we get an integer for drop position
 					n, err := strconv.Atoi(key.args[1])
@@ -306,7 +273,7 @@ func (g *Game) Update() error {
 						if key.args[1] == "all" {
 							g.plinko.DropAll(key.args[2])
 						}
-						return nil
+						return
 					}
 					g.plinko.DropBall(n, key.args[2])
 				}
@@ -322,7 +289,7 @@ func (g *Game) Update() error {
 				g.tanks.Reset()
 			} else if key.args[0] == "join" {
 				if len(key.args) < 3 {
-					return nil
+					return
 				}
 				g.tanks.AddPlayer(key.args[1], key.args[2])
 			} else if key.args[0] == "reset" {
@@ -330,11 +297,11 @@ func (g *Game) Update() error {
 			} else if key.args[0] == "shoot" {
 				a, err := strconv.ParseFloat(key.args[2], 64)
 				if err != nil {
-					return nil
+					return
 				}
 				v, err := strconv.ParseFloat(key.args[3], 64)
 				if err != nil {
-					return nil
+					return
 				}
 				g.tanks.Shoot(key.args[1], a, v)
 			} else if key.args[0] == "begin" {
@@ -346,21 +313,42 @@ func (g *Game) Update() error {
 				g.bopometer.SetRunning(true)
 			} else if key.args[0] == "add" && g.bopometer.IsRunning() {
 				if len(key.args) < 2 {
-					return nil
+					return
 				}
 				n, err := strconv.Atoi(key.args[1])
 				if err != nil {
-					return nil
+					return
 				}
 				g.bopometer.Add(n)
 			} else if key.args[0] == "stop" && g.bopometer.IsRunning() {
 				g.bopometer.Finish()
 				g.bopometer.SetRunning(false)
 			}
+		case LightsOutCmd:
+			if key.args[0] == "start" && !g.lightsRunning {
+				//g.lightsout.Reset()
+				g.lightsout.LoadPuzzle(0)
+				g.lightsRunning = true
+				break
+			}
+			if g.lightsRunning {
+				if key.args[0] == "reset" {
+					g.lightsout.Reset()
+					break
+				}
+				if key.args[0] == "stop" {
+					g.lightsRunning = false
+					break
+				}
+				n, err := strconv.Atoi(key.args[0])
+				if err != nil {
+					break
+				}
+				g.lightsout.Press(n)
+			}
 		case MiracleCmd:
 			g.showWhip = true
-			g.sounds["indigo"].Rewind()
-			g.sounds["indigo"].Play()
+			rl.PlaySoundMulti(g.sounds["indigo"])
 			go func() {
 				time.Sleep(time.Second * 5)
 				g.showWhip = false
@@ -396,78 +384,75 @@ func (g *Game) Update() error {
 
 	for i := 0; i < g.sprites.num; i++ {
 		if err := g.sprites.sprites[i].Update(delta); err != nil {
-			return err
+			return
 		}
 	}
 	g.lastUpdate = time.Now()
-	return nil
 }
 
-func (g *Game) Draw(screen *ebiten.Image) {
+func (g *Game) Draw() {
+	rl.BeginDrawing()
+	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
+	rl.DrawFPS(50, 50)
 
 	if g.bigMouse {
-		cx, cy := ebiten.CursorPosition()
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(float64(cx-(g.bigMouseImg.Bounds().Dx()/2)), float64(cy-(g.bigMouseImg.Bounds().Dy()/2)))
-		screen.DrawImage(g.bigMouseImg, op)
+		mpos := rl.GetMousePosition()
+		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
 	}
 	if g.tanksRunning {
-		g.tanks.Draw(screen)
+		g.tanks.Draw()
 	}
+
+	if g.lightsRunning {
+		g.lightsout.Draw()
+	}
+
 	if g.gameRunning {
-		g.snakeGame.Draw(screen)
+		g.snakeGame.Draw()
 	}
 	for i := 0; i < g.sprites.num; i++ {
-		g.sprites.sprites[i].Draw(screen)
+		g.sprites.sprites[i].Draw()
 	}
-	if g.showStatic {
-		g.staticLayer.Draw(screen)
-	}
+	// if g.showStatic {
+	// 	g.staticLayer.Draw(screen)
+	// }
 	if g.plinkoRunning {
-		g.plinko.Draw(screen)
+		g.plinko.Draw()
 	}
 	if g.bopometer.IsRunning() || g.bopometer.IsFinished() {
-		g.bopometer.Draw(screen)
+		g.bopometer.Draw()
 	}
-	// text.Draw(screen, "!go spawn 100", myFont, 49, screenHeight-399, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-	// text.Draw(screen, "!go spawn 100", myFont, 50, screenHeight-400, color.RGBA{0, 0xFF, 0, 0xFF})
 
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
-			g.marquees[i].Draw(screen)
+			g.marquees[i].Draw()
 		}
 	}
 
 	if g.showWhip {
-		op := ebiten.DrawImageOptions{}
-		op.GeoM.Scale(0.6, 0.6)
-		op.GeoM.Translate(560, 0)
-		screen.DrawImage(mwhipImg, &op)
+		rl.DrawTextureEx(mwhipImg, rl.Vector2{X: 560, Y: 0}, 0, 0.6, rl.White)
 	}
 
-	fps := fmt.Sprintf("FPS: %.2f TPS: %.2f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
-	ebitenutil.DebugPrint(screen, fps)
-}
-
-func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return screenWidth, screenHeight
+	rl.EndDrawing()
 }
 
 func main() {
-	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("ebiten test")
-	ebiten.SetScreenTransparent(true)
-	ebiten.SetMousePassThru(true)
-	ebiten.SetWindowFloating(true)
-	ebiten.SetRunnableOnUnfocused(true)
-	ebiten.SetWindowDecorated(false)
-	ebiten.SetInitFocused(false)
-	ebiten.SetWindowResizable(true)
-	ebiten.SetWindowPosition(0, 0)
+	rl.SetConfigFlags(rl.FlagWindowFloating | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
+	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
+	rl.SetTargetFPS(60)
 
+	rl.InitAudioDevice()
+	rl.SetMasterVolume(0.2)
+
+	physics.Init()
+	mwhipImg = rl.LoadTexture("./images/mwhip.png")
+	LoadSprites()
+	visuals.LoadBopometerAssets()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
 	game := &ga
+	game.bigMouseImg = sprites[2]
+	LoadMarqueeFonts()
 
 	ln, err := net.Listen("tcp", ":8081")
 	if err != nil {
@@ -481,17 +466,18 @@ func main() {
 			if err != nil {
 				log.Println(err)
 			}
-			go handleConnection(conn, c, wc, game.audioContext)
+			go handleConnection(conn, c, wc)
 		}
 	}(game.commChannel, ga.connWriteChan)
-	game.plinko = plinko.Load(screenWidth, screenHeight, game.sounds, game.connWriteChan)
+	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan, game.sounds)
 	defer game.plinko.CancelTimer()
 	//game.plinkoRunning = true
 	game.snakeGame = newSnake(game.sounds)
-	game.bigMouseImg = sprites[2]
+	// // game.bigMouseImg = sprites[2]
 	game.tanks = tanks.Load(screenWidth, screenHeight, game.sounds)
-	//game.tanksRunning = true
+	// //game.tanksRunning = true
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
+	game.lightsout = lightsout.NewGame(5, 5)
 	// _, err = getAvailableVoices()
 	// if err != nil {
 	// 	log.Println(err.Error())
@@ -499,36 +485,41 @@ func main() {
 	//fmt.Println(voices)
 	//hm := tanks.GenerateHeightmap()
 	//fmt.Println(hm)
-	if err := ebiten.RunGame(game); err != nil {
-		log.Fatal(err)
+	// if err := ebiten.RunGame(game); err != nil {
+	// 	log.Fatal(err)
+	// }
+	for !rl.WindowShouldClose() {
+		game.Update()
+		game.Draw()
 	}
+	physics.Close()
+	rl.CloseAudioDevice()
+	rl.CloseWindow()
 }
 
-func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Context) {
+func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	defer conn.Close()
 	go func() {
 		handleWrites(&conn, wc)
 	}()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
-	go speak(actx, msg)
-	//fmt.Fprintf(conn, "Connected to overlay\n")
+	go speak(msg)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		//scalego 100
 		fields := strings.Fields(scanner.Text())
 		if len(fields) == 0 {
 			continue
 		}
 		switch fields[0] {
 		case "up":
-			c <- cmd{int(ebiten.KeyUp), []string{}}
+			c <- cmd{int(rl.KeyUp), []string{}}
 		case "down":
-			c <- cmd{int(ebiten.KeyDown), []string{}}
+			c <- cmd{int(rl.KeyDown), []string{}}
 		case "left":
-			c <- cmd{int(ebiten.KeyLeft), []string{}}
+			c <- cmd{int(rl.KeyLeft), []string{}}
 		case "right":
-			c <- cmd{int(ebiten.KeyRight), []string{}}
+			c <- cmd{int(rl.KeyRight), []string{}}
 		case "spawngo":
 			arg := "1"
 			if len(fields) > 1 {
@@ -595,6 +586,11 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string, actx *audio.Con
 			c <- cmd{BopCmd, fields[1:]}
 		case "miracle":
 			c <- cmd{MiracleCmd, []string{}}
+		case "lo":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{LightsOutCmd, fields[1:]}
 		}
 		fmt.Println(fields)
 	}
@@ -627,14 +623,12 @@ func (g *Game) newGopher(n int) {
 		g.sprites.num++
 
 	}
-	g.sounds["eep"].Rewind()
-	g.sounds["eep"].Play()
+	rl.PlaySound(g.sounds["eep"])
 }
 
 func (g *Game) destroyGophers() {
 	if g.sprites.num > 0 {
-		g.sounds["logjam"].Rewind()
-		g.sounds["logjam"].Play()
+		rl.PlaySoundMulti(g.sounds["logjam"])
 	}
 	g.sprites.num = 0
 	g.sprites.sprites = make([]*Sprite, maxSprites)
@@ -645,8 +639,7 @@ func (g *Game) hideGopher() {
 		return
 	}
 	if g.sprites.sprites[0].draw {
-		g.sounds["whit"].Rewind()
-		g.sounds["whit"].Play()
+		rl.PlaySoundMulti(g.sounds["whit"])
 	}
 	g.sprites.sprites[0].draw = false
 }
@@ -656,8 +649,7 @@ func (g *Game) showGopher() {
 		return
 	}
 	if !g.sprites.sprites[0].draw {
-		g.sounds["eep"].Rewind()
-		g.sounds["eep"].Play()
+		rl.PlaySoundMulti(g.sounds["eep"])
 	}
 	g.sprites.sprites[0].draw = true
 }
@@ -667,8 +659,7 @@ func (g *Game) setGopherSize(size float64) {
 		return
 	}
 	if size >= g.sprites.sprites[0].objScale*2 && g.sprites.sprites[0].draw {
-		g.sounds["boing"].Rewind()
-		g.sounds["boing"].Play()
+		rl.PlaySoundMulti(g.sounds["boing"])
 	}
 	g.sprites.sprites[0].SetScale(size)
 }
@@ -676,8 +667,7 @@ func (g *Game) setGopherSize(size float64) {
 func (g *Game) quack(n int) {
 	go func() {
 		for i := 1; i <= n; i++ {
-			g.sounds["quack"].Rewind()
-			g.sounds["quack"].Play()
+			rl.PlaySoundMulti(g.sounds["quack"])
 			time.Sleep(time.Millisecond * 200)
 		}
 	}()
