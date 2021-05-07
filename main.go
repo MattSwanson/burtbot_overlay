@@ -28,7 +28,7 @@ import (
 //var startTime time.Time
 var ga Game
 var myFont font.Face
-
+var mpos rl.Vector2
 var mwhipImg rl.Texture2D
 
 const (
@@ -79,23 +79,6 @@ func init() {
 	ga.lastUpdate = time.Now()
 	//startTime = time.Now()
 }
-
-// func initSound(ctx *audio.Context, fileName string) (*audio.Player, error) {
-// 	file, err := os.Open(fileName)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	ws, err := wav.DecodeWithSampleRate(audioSampleRate, file)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	player, err := audio.NewPlayer(ctx, ws)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	player.SetVolume(soundVolume)
-// 	return player, nil
-// }
 
 type Game struct {
 	sprites         Sprites
@@ -256,9 +239,6 @@ func (g *Game) Update() {
 			// keep alive for 60 seconds with no drops
 			// each drop sets the keepalive back to 60?
 			// no other arguments used
-			if key.args[0] == "start" && !g.plinkoRunning {
-				g.plinkoRunning = true
-			}
 			if g.plinkoRunning {
 				// !plinko drop n username
 				// drop a token at drop position n for the given username
@@ -271,14 +251,11 @@ func (g *Game) Update() {
 					if err != nil {
 						// for testing:
 						if key.args[1] == "all" {
-							g.plinko.DropAll(key.args[2])
+							g.plinko.DropAll(key.args[2], key.args[3])
 						}
 						return
 					}
-					g.plinko.DropBall(n, key.args[2])
-				}
-				if key.args[0] == "stop" {
-					g.plinkoRunning = false
+					g.plinko.DropBall(n, key.args[2], key.args[3])
 				}
 			}
 		case TanksCmd:
@@ -395,10 +372,10 @@ func (g *Game) Draw() {
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
 	rl.DrawFPS(50, 50)
 
-	if g.bigMouse {
-		mpos := rl.GetMousePosition()
-		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
-	}
+	// if g.bigMouse {
+	// 	rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
+	// }
+
 	if g.tanksRunning {
 		g.tanks.Draw()
 	}
@@ -440,7 +417,6 @@ func main() {
 	rl.SetConfigFlags(rl.FlagWindowFloating | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
-
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(0.2)
 
@@ -471,6 +447,7 @@ func main() {
 	}(game.commChannel, ga.connWriteChan)
 	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan, game.sounds)
 	defer game.plinko.CancelTimer()
+	game.plinkoRunning = true
 	//game.plinkoRunning = true
 	game.snakeGame = newSnake(game.sounds)
 	// // game.bigMouseImg = sprites[2]
