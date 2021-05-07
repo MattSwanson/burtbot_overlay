@@ -11,6 +11,15 @@ import (
 const tankSize = 48.0
 
 var imgCache map[string]rl.Texture2D = make(map[string]rl.Texture2D)
+var refAngles = []float64{
+	0,
+	-math.Pi / 6,
+	-math.Pi / 3,
+	-math.Pi / 2,
+	-2 * math.Pi / 3,
+	-5 * math.Pi / 6,
+	-math.Pi,
+}
 
 type tank struct {
 	playerName               string
@@ -111,12 +120,25 @@ func (t *tank) setBounds() {
 
 }
 
-func (t *tank) Draw() {
+func (t *tank) Draw(myTurn bool) {
 
 	// Account for rotation of the tank
 	xOffset := math.Cos(t.a)*-t.w/2 - math.Sin(t.a)*-t.h
 	yOffset := math.Sin(t.a)*-t.w/2 + math.Cos(t.a)*-t.h
 
+	textColor := rl.Red
+	if myTurn {
+		textColor = rl.Green
+		for _, ra := range refAngles {
+			rl.DrawLine(int32(t.cx), int32(t.cy), int32(t.cx+50*math.Cos(t.a+ra)-math.Sin(t.a+ra)), int32(t.cy+50*math.Sin(t.a+ra)+math.Cos(t.a+ra)), rl.Green)
+		}
+	}
+
 	rl.DrawTextureEx(t.img, rl.Vector2{X: float32(t.x + xOffset), Y: float32(t.y + yOffset)}, float32(t.a*180/math.Pi), float32(t.scale), rl.White)
-	rl.DrawText(t.playerName, int32(t.x+t.w/2+10), int32(t.y-t.h), 24, rl.Green)
+
+	for _, b := range t.bounds {
+		rl.DrawLine(int32(b.x0), int32(b.y0), int32(b.x1), int32(b.y1), rl.Red)
+	}
+
+	rl.DrawText(t.playerName, int32(t.x+t.w/2+10), int32(t.y-t.h), 24, textColor)
 }

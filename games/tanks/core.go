@@ -2,20 +2,17 @@ package tanks
 
 import (
 	"fmt"
-	"log"
 	"math"
-	"os"
+	"math/rand"
 	"time"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
-
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
 )
 
-var playerLabelFont font.Face
-var instFont font.Face
-var winnerFont font.Face
+const (
+	maxShotVelocity = 1500 // ?
+)
+
 var xspawns = []int{}
 var boomImg rl.Texture2D
 
@@ -41,39 +38,39 @@ type Core struct {
 }
 
 func Load(sWidth, sHeight int, sounds map[string]rl.Sound) *Core {
-	bs, err := os.ReadFile("caskaydia.TTF")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tt, err := opentype.Parse(bs)
-	if err != nil {
-		log.Fatal(err)
-	}
-	const dpi = 72
-	playerLabelFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    24,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	instFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    48,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	winnerFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    72,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
+	// bs, err := os.ReadFile("caskaydia.TTF")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// tt, err := opentype.Parse(bs)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// const dpi = 72
+	// playerLabelFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+	// 	Size:    24,
+	// 	DPI:     dpi,
+	// 	Hinting: font.HintingFull,
+	// })
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// instFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+	// 	Size:    48,
+	// 	DPI:     dpi,
+	// 	Hinting: font.HintingFull,
+	// })
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// winnerFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+	// 	Size:    72,
+	// 	DPI:     dpi,
+	// 	Hinting: font.HintingFull,
+	// })
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	boomImg = rl.LoadTexture("./images/tanks/tanks_boom.png")
 
@@ -84,10 +81,13 @@ func Load(sWidth, sHeight int, sounds map[string]rl.Sound) *Core {
 	// y position is based on terrain
 	// check pixels in the given column until we find one which
 	// is not 0x00 alpha
+
+	w := (rand.Float64() - 0.5) * 100
 	return &Core{
 		tanks:        tanks,
 		terrainImg:   terrain,
 		heightMap:    heightMap,
+		wind:         w,
 		screenWidth:  sWidth,
 		screenHeight: sHeight,
 		sounds:       sounds,
@@ -116,8 +116,9 @@ func (c *Core) advanceTurn(i int) {
 
 func (c *Core) Draw() {
 	rl.DrawTexture(c.terrainImg, 0, 0, rl.White)
-	for _, tank := range c.tanks {
-		tank.Draw()
+	for i, tank := range c.tanks {
+		myTurn := c.currentTurn == i
+		tank.Draw(myTurn)
 	}
 	if c.projectile != nil {
 		c.projectile.Draw()
@@ -126,12 +127,18 @@ func (c *Core) Draw() {
 		rl.DrawTexture(boomImg, int32(c.boomX), int32(c.boomY), rl.White)
 	}
 	if c.gameStarted {
-		s := fmt.Sprintf("%s's [%d] turn. !tanks shoot <angle> <velocity>", c.tanks[c.currentTurn].playerName, c.currentTurn)
+		s := fmt.Sprintf("%s's turn. !tanks shoot <angle(degrees)> <velocity(1-100)>", c.tanks[c.currentTurn].playerName)
 		rl.DrawText(s, 75, 1350, 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
 	} else {
 		rl.DrawText("type '!tanks join' to join the game!", 75, 1350, 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
 	}
 	// // draw a wind indicator
+	windIndX := float64(c.screenWidth) / 2
+	if c.wind < 0 {
+		windIndX += c.wind
+	}
+	rl.DrawRectangle(int32(windIndX), 0, int32(math.Abs(c.wind)), 50, rl.Blue)
+	rl.DrawLine(int32(c.screenWidth/2), 0, int32(c.screenWidth/2), 75, rl.Green)
 	if c.gameOver {
 		s := fmt.Sprintf("%s is the winner!", c.winner)
 		rl.DrawText(s, 410, int32(c.screenHeight/2), 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
@@ -192,9 +199,9 @@ func (c *Core) Update(delta float64) error {
 			continue
 		}
 
-		for i := 0; i < 4; i++ {
-			cpx := c.projectile.x + radius*math.Cos(float64(i)*2.0/4.0*math.Pi)
-			cpy := c.projectile.y + radius*math.Sin(float64(i)*2.0/4.0*math.Pi)
+		for i := 0; i < 32; i++ {
+			cpx := c.projectile.x + radius*math.Cos(float64(i)*2.0/32.0*math.Pi)
+			cpy := c.projectile.y - radius*math.Sin(float64(i)*2.0/32.0*math.Pi)
 			if tank.bounds[0].IsLeft(cpx, cpy) > 0 && tank.bounds[1].IsLeft(cpx, cpy) > 0 && tank.bounds[2].IsLeft(cpx, cpy) > 0 && tank.bounds[3].IsLeft(cpx, cpy) > 0 {
 				c.projectile = nil
 				c.boomX, c.boomY = tank.cx-float64(boomImg.Width)/2, tank.cy-float64(boomImg.Width)/2
@@ -259,6 +266,7 @@ func (c *Core) Reset() {
 	c.tanks = []*tank{}
 	c.playersJoined = 0
 	c.currentTurn = 0
+	c.wind = (rand.Float64() - 0.5) * 100
 	c.showBoom = false
 }
 
@@ -266,6 +274,11 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 	if !c.gameStarted || player != c.tanks[c.currentTurn].playerName {
 		return
 	}
+	if totalVelocity < 1 {
+		return
+	}
+	totalVelocity = math.Min(totalVelocity, 100)
+	totalVelocity = maxShotVelocity * totalVelocity / 100
 	angle = angle*math.Pi/180.0 - c.tanks[c.currentTurn].a
 	pSpawnOffsetX := math.Cos(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
 	pSpawnOffsetY := math.Sin(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
