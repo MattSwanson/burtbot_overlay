@@ -300,7 +300,7 @@ func (c *Core) CheckForCollision(delta float64) {
 			} else if dx < 0 {
 				px := b.x + b.radius + b.radius*math.Cos(5.497787)
 				py := b.y + b.radius - b.radius*math.Sin(5.497787)
-				if barrier.bounds[0].IsLeft(px, px) <= 0 &&
+				if barrier.bounds[0].IsLeft(px, py) <= 0 &&
 					barrier.bounds[1].IsLeft(px, py) <= 0 &&
 					barrier.bounds[2].IsLeft(px, py) <= 0 {
 
