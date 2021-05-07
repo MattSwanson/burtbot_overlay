@@ -163,7 +163,7 @@ func Load(screenWidth, screenHeight float64, wc chan string, sounds map[string]r
 		log.Fatal(err)
 	}
 
-	tokenImg = rl.LoadTexture("./images/plinko/blue_token.png")
+	tokenImg = rl.LoadTexture("./images/plinko/white_token.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -254,8 +254,6 @@ func (c *Core) CheckForCollision(delta float64) {
 				ot.vy = (drain * totalVelocity) / 2.0 * (-1.0 * dy / mag)
 
 				rl.PlaySoundMulti(c.sounds["boing"])
-				// c.sounds["boing"].Rewind()
-				// c.sounds["boing"].Play()
 			}
 		}
 
@@ -290,8 +288,8 @@ func (c *Core) CheckForCollision(delta float64) {
 					ny := -math.Sin(math.Pi / 4.0)
 
 					bbx, bby := barrier.bounds[0].x0, barrier.bounds[0].y0
-					nOffset := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(bbx), float32(bby)})
-					dist := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(px), float32(py)})
+					nOffset := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(bbx), Y: float32(bby)})
+					dist := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(px), Y: float32(py)})
 					dist -= nOffset
 					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
 					r = scale(r, 0.6)
@@ -310,8 +308,8 @@ func (c *Core) CheckForCollision(delta float64) {
 					ny := -math.Sin(3 * math.Pi / 4.0)
 
 					bbx, bby := barrier.bounds[1].x0, barrier.bounds[1].y0
-					nOffset := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(bbx), float32(bby)})
-					dist := rl.Vector2DotProduct(rl.Vector2{float32(nx), float32(ny)}, rl.Vector2{float32(px), float32(py)})
+					nOffset := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(bbx), Y: float32(bby)})
+					dist := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(px), Y: float32(py)})
 					dist -= nOffset
 
 					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
@@ -373,7 +371,7 @@ func (c *Core) CheckForCollision(delta float64) {
 			}
 		}
 
-		if b.y > gameHeight+200 {
+		if b.y > gameHeight+50 {
 			b.falling = false
 			fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, c.rewardMultiplier)
@@ -415,6 +413,9 @@ func (c *Core) Update() error {
 }
 
 func (c *Core) Draw() {
+	if len(c.tokens) == 0 {
+		return
+	}
 	for _, v := range c.tokens {
 		v.Draw()
 	}
@@ -433,19 +434,19 @@ func (c *Core) Draw() {
 	}
 }
 
-func (c *Core) DropBall(pos int, playerName string) {
+func (c *Core) DropBall(pos int, playerName, playerColor string) {
 	// make a new token with its pos set to the selected drop point
 	if pos < 0 || pos >= len(c.queues) {
 		return // do nothing for now, but should return an error
 		// or is this validated on the other end? no
 	}
-	t := NewToken(playerName, tokenImg, c.queues[pos].dropPosition)
+	t := NewToken(playerName, playerColor, tokenImg, c.queues[pos].dropPosition)
 	c.queues[pos].push(t)
 }
 
-func (c *Core) DropAll(playerName string) {
+func (c *Core) DropAll(playerName, playerColor string) {
 	for i := 0; i < len(c.queues); i++ {
-		c.DropBall(i, playerName)
+		c.DropBall(i, playerName, playerColor)
 	}
 }
 
@@ -501,14 +502,11 @@ func generatePegs(screenWidth, screenHeight float64) []*peg {
 		x := (float64((i%numColumns)-numColumns/2)*100.0 + (screenWidth/2 - halfImgWidth)) + offset
 		y := float64(i/numColumns)*75.0 + 200.0
 		radius := float64(pegImg.Width) / 2.0
-		// body := physics.NewBodyCircle(rl.Vector2{X: float32(x), Y: float32(y)}, float32(radius), 1)
-		// body.Enabled = false
 		p := peg{
 			x:      x,
 			y:      y,
 			radius: radius,
 			img:    pegImg,
-			//physBody: body,
 		}
 		pegs[i] = &p
 	}
@@ -526,7 +524,7 @@ func generateGoalZones() []*zone {
 		}
 		max := fPoint{
 			x: min.x + w,
-			y: gameHeight + 50,
+			y: gameHeight + 10,
 		}
 		z := NewZone(fRect{min, max}, goalValues[i])
 		zones[i] = z

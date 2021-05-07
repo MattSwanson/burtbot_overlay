@@ -30,11 +30,6 @@ func NewZone(rect fRect, n int) *zone {
 }
 
 func (z *zone) Draw() {
-	// op := &ebiten.DrawImageOptions{}
-	// op.GeoM.Translate(z.x, z.y)
-	// screen.DrawImage(z.img, op)
-	// text.Draw(screen, fmt.Sprint(z.rewardValue), gameFont, int(z.x+z.w/2), int(gameHeight), color.RGBA{0x00, 0xff, 0x00, 0x55})
-	// text.Draw(screen, fmt.Sprint(z.hits), gameFont, int(z.x+z.w/2), int(z.y+3*z.h/2), color.RGBA{0x00, 0xff, 0x00, 0x11})
 	rl.DrawTexture(z.img, int32(z.x), int32(z.y), rl.White)
 	rl.DrawText(fmt.Sprint(z.rewardValue), int32(z.x+z.w/2), int32(gameHeight-80), 64, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0x55})
 }

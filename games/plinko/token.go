@@ -1,6 +1,8 @@
 package plinko
 
 import (
+	"fmt"
+	"log"
 	"math/rand"
 
 	"github.com/MattSwanson/raylib-go/physics"
@@ -21,13 +23,19 @@ type token struct {
 	radius      float64
 	img         rl.Texture2D
 	playerName  string
+	playerColor rl.Color
 	labelOffset fPoint
 	physBody    *physics.Body
 }
 
-func NewToken(playerName string, img rl.Texture2D, pos fPoint) *token {
+func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint) *token {
 	radius := float64(img.Width) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
+	color, err := colorHexStrToColor(playerColor)
+	if err != nil {
+		log.Println("could not convert hex string to color", err.Error())
+		color = rl.Blue
+	}
 	return &token{
 		mass:        tokenMass,
 		x:           pos.x,
@@ -35,8 +43,16 @@ func NewToken(playerName string, img rl.Texture2D, pos fPoint) *token {
 		img:         img,
 		radius:      radius,
 		playerName:  playerName,
+		playerColor: color,
 		labelOffset: labelOffset,
 	}
+}
+
+func colorHexStrToColor(colorString string) (rl.Color, error) {
+	c := rl.Color{}
+	c.A = 0xff
+	_, err := fmt.Sscanf(colorString, "#%02x%02x%02x", &c.R, &c.G, &c.B)
+	return c, err
 }
 
 func (b *token) Update(delta float64) {
@@ -54,7 +70,7 @@ func (b *token) Draw() {
 	if !b.falling {
 		return
 	}
-	rl.DrawTexture(b.img, int32(b.x), int32(b.y), rl.White)
+	rl.DrawTexture(b.img, int32(b.x), int32(b.y), b.playerColor)
 	rl.DrawText(b.playerName, int32(b.x+b.labelOffset.x), int32(b.y+b.labelOffset.y), 18, rl.Green)
 }
 
