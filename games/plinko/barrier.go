@@ -41,9 +41,6 @@ func (b *barrier) generateBounds() {
 
 func (b *barrier) Draw() {
 	rl.DrawTexture(b.sprite, int32(b.x-b.w/2), int32(b.y-b.h/2), rl.White)
-	for _, e := range b.bounds {
-		rl.DrawLine(int32(e.x0), int32(e.y0), int32(e.x1), int32(e.y1), rl.Red)
-	}
 }
 
 func (b *barrier) GetRebound() float64 {
