@@ -100,9 +100,12 @@ func (m *Marquee) setText(j string) {
 	m.sequence = sequence{}
 	eIndices := emoteIndices{}
 	if msg.Emotes != "" {
-		const prefixLen = 13
-		emoteData := strings.Split(msg.Emotes, "/")
+		prefixLen := 13
+		if m.oneShot {
+			prefixLen = 14
+		}
 
+		emoteData := strings.Split(msg.Emotes, "/")
 		for _, e := range emoteData {
 			split := strings.Split(e, ":")
 			img, err := getImageFromCDN(split[0])
@@ -186,7 +189,7 @@ func (m *Marquee) Draw() {
 			case string:
 				rl.DrawTextEx(marqueeFont, thing, rl.Vector2{X: float32(m.x + m.xOffsets[k]), Y: float32(m.y)}, textSize, 0, rl.Color(m.color))
 			case rl.Texture2D:
-				rl.DrawTexture(thing, int32(m.x+m.xOffsets[k]+25), int32(m.y), rl.White)
+				rl.DrawTexture(thing, int32(m.x+m.xOffsets[k]), int32(m.y), rl.White)
 			}
 		}
 	}

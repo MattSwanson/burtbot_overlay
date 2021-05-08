@@ -484,7 +484,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	go speak(msg)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
+		txt := scanner.Text()
+		fields := strings.Fields(txt)
 		if len(fields) == 0 {
 			continue
 		}
@@ -537,9 +538,9 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 				continue
 			}
 			if fields[1] == "set" {
-				c <- cmd{MarqueeCmd, []string{strings.Join(fields[2:], " ")}}
+				c <- cmd{MarqueeCmd, []string{txt[12:]}}
 			} else if fields[1] == "once" {
-				c <- cmd{SingleMarqueeCmd, []string{strings.Join(fields[2:], " ")}}
+				c <- cmd{SingleMarqueeCmd, []string{txt[12:]}}
 			}
 		case "tts":
 			if len(fields) < 2 {
