@@ -253,7 +253,7 @@ func (c *Core) CheckForCollision(delta float64) {
 				ot.vx = (drain * totalVelocity) / 2.0 * (-1.0 * dx / mag)
 				ot.vy = (drain * totalVelocity) / 2.0 * (-1.0 * dy / mag)
 
-				rl.PlaySoundMulti(c.sounds["boing"])
+				// rl.PlaySoundMulti(c.sounds["boing"])
 			}
 		}
 
@@ -278,47 +278,59 @@ func (c *Core) CheckForCollision(delta float64) {
 			// which barrier are we closest to?
 
 			if dx > 0 {
-				px := b.x + b.radius + b.radius*math.Cos(3.926991)
-				py := b.y + b.radius - b.radius*math.Sin(3.926991)
-				if barrier.bounds[0].IsLeft(px, py) <= 0 &&
-					barrier.bounds[1].IsLeft(px, py) <= 0 &&
-					barrier.bounds[2].IsLeft(px, py) <= 0 {
+				for i := 0; i <= 6; i++ {
+					// 3.926991
+					a := math.Pi + float64(i)*math.Pi/12
+					px := b.x + b.radius + b.radius*math.Cos(a)
+					py := b.y + b.radius - b.radius*math.Sin(a)
+					if barrier.bounds[0].IsLeft(px, py) <= 0 &&
+						barrier.bounds[1].IsLeft(px, py) <= 0 &&
+						barrier.bounds[2].IsLeft(px, py) <= 0 {
 
-					nx := math.Cos(math.Pi / 4.0)
-					ny := -math.Sin(math.Pi / 4.0)
+						nx := math.Cos(math.Pi / 4.0)
+						ny := -math.Sin(math.Pi / 4.0)
 
-					bbx, bby := barrier.bounds[0].x0, barrier.bounds[0].y0
-					nOffset := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(bbx), Y: float32(bby)})
-					dist := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(px), Y: float32(py)})
-					dist -= nOffset
-					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
-					r = scale(r, 0.6)
-					b.vx, b.vy = r.x, r.y
-					b.x += float64(-dist) * math.Cos(nx)
-					b.y -= float64(-dist) * -math.Sin(ny)
+						px := b.x + b.radius + b.radius*math.Cos(3.926991)
+						py := b.y + b.radius - b.radius*math.Sin(3.926991)
+						bbx, bby := barrier.bounds[0].x0, barrier.bounds[0].y0
+						nOffset := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(bbx), Y: float32(bby)})
+						dist := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(px), Y: float32(py)})
+						dist -= nOffset
+						r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
+						r = scale(r, 0.6)
+						b.vx, b.vy = r.x, r.y
+						b.x += float64(-dist-1) * math.Cos(nx)
+						b.y -= float64(-dist-1) * -math.Sin(ny)
+						break
+					}
 				}
 			} else if dx < 0 {
-				px := b.x + b.radius + b.radius*math.Cos(5.497787)
-				py := b.y + b.radius - b.radius*math.Sin(5.497787)
-				if barrier.bounds[0].IsLeft(px, py) <= 0 &&
-					barrier.bounds[1].IsLeft(px, py) <= 0 &&
-					barrier.bounds[2].IsLeft(px, py) <= 0 {
+				for i := 0; i <= 6; i++ {
+					// 5.497787
+					a := 3*math.Pi/2 + float64(i)*math.Pi/12
+					px := b.x + b.radius + b.radius*math.Cos(a)
+					py := b.y + b.radius - b.radius*math.Sin(a)
+					if barrier.bounds[0].IsLeft(px, py) <= 0 &&
+						barrier.bounds[1].IsLeft(px, py) <= 0 &&
+						barrier.bounds[2].IsLeft(px, py) <= 0 {
 
-					nx := math.Cos(3 * math.Pi / 4.0)
-					ny := -math.Sin(3 * math.Pi / 4.0)
+						nx := math.Cos(3 * math.Pi / 4.0)
+						ny := -math.Sin(3 * math.Pi / 4.0)
 
-					bbx, bby := barrier.bounds[1].x0, barrier.bounds[1].y0
-					nOffset := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(bbx), Y: float32(bby)})
-					dist := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(px), Y: float32(py)})
-					dist -= nOffset
+						bbx, bby := barrier.bounds[1].x0, barrier.bounds[1].y0
+						px = b.x + b.radius + b.radius*math.Cos(5.497787)
+						py = b.y + b.radius - b.radius*math.Sin(5.497787)
+						nOffset := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(bbx), Y: float32(bby)})
+						dist := rl.Vector2DotProduct(rl.Vector2{X: float32(nx), Y: float32(ny)}, rl.Vector2{X: float32(px), Y: float32(py)})
+						dist -= nOffset
 
-					r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
-					r = scale(r, 0.6)
-					b.vx, b.vy = r.x, r.y
-					b.x -= float64(-dist) * math.Cos(nx)
-					b.y -= float64(-dist) * -math.Sin(ny)
-
-					fmt.Println(b.vx, b.vy)
+						r := reflect(vec2f{b.vx, b.vy}, vec2f{nx, ny})
+						r = scale(r, 0.6)
+						b.vx, b.vy = r.x, r.y
+						b.x -= float64(-dist-1) * math.Cos(nx)
+						b.y -= float64(-dist-1) * -math.Sin(ny)
+						break
+					}
 				}
 			} else {
 				px := b.x + b.radius
