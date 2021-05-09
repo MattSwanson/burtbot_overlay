@@ -20,6 +20,7 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
 	"golang.org/x/image/font"
+	"golang.org/x/net/context"
 
 	"github.com/MattSwanson/raylib-go/physics"
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -477,9 +478,11 @@ func main() {
 
 func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	defer conn.Close()
-	go func() {
-		handleWrites(&conn, wc)
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func(ctx context.Context) {
+		handleWrites(ctx, &conn, wc)
+	}(ctx)
+	defer cancel()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
 	go speak(msg, true)
@@ -575,15 +578,20 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	}
 }
 
-func handleWrites(conn *net.Conn, wc chan string) {
+func handleWrites(ctx context.Context, conn *net.Conn, wc chan string) {
 	for {
-		s := <-wc
-		n, err := fmt.Fprint(*conn, s)
-		if err != nil {
-			log.Println("couldn't write to connection: ", err.Error())
-			continue
+		select {
+		case <-ctx.Done():
+			fmt.Println("Canceling tcp write loop")
+			return
+		case s := <-wc:
+			n, err := fmt.Fprint(*conn, s)
+			if err != nil {
+				log.Println("couldn't write to connection: ", err.Error())
+				break
+			}
+			log.Printf("wrote %d bytes to tcp connection", n)
 		}
-		log.Printf("wrote %d bytes to tcp connection", n)
 	}
 }
 
