@@ -240,7 +240,7 @@ func (c *Core) Update(delta float64) error {
 	for i := 0; i < 6; i++ {
 		// find the x center of the projectile from the top left corner (origin)
 		cpx := int(c.projectile.x + radius*math.Cos(float64(i)*2.0/6.0*math.Pi))
-		if cpx < 0 || cpx > 2560 {
+		if cpx < 0 || cpx >= 2560 {
 			break
 		}
 		// then the y center
