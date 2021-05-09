@@ -233,7 +233,8 @@ func (g *Game) Update() {
 			g.marquees = append(g.marquees, m)
 			g.marqueesEnabled = true
 		case TTS:
-			go speak(key.args[0])
+			cache, _ := strconv.ParseBool(key.args[1])
+			go speak(key.args[0], cache)
 		case PlinkoCmd:
 			// !plinko start - this will start the game
 			// keep alive for 60 seconds with no drops
@@ -481,7 +482,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	}()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
-	go speak(msg)
+	go speak(msg, true)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		txt := scanner.Text()
@@ -543,10 +544,10 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 				c <- cmd{SingleMarqueeCmd, []string{txt[12:]}}
 			}
 		case "tts":
-			if len(fields) < 2 {
+			if len(fields) < 3 {
 				continue
 			}
-			c <- cmd{TTS, []string{strings.Join(fields[1:], " ")}}
+			c <- cmd{TTS, []string{strings.Join(fields[2:], " "), fields[1]}}
 		case "plinko":
 			if len(fields) < 2 {
 				continue

@@ -1,3 +1,5 @@
 *.exe
 .vscode
 *.stuff
+
+tts_cache/*.wav

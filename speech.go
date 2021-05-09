@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	texttospeech "cloud.google.com/go/texttospeech/apiv1"
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -14,14 +17,56 @@ const (
 	ttsSampleRate = 44100
 )
 
-func speak(txt string) error {
-	audioBytes, err := getTTS(txt)
+var cache []string // a slice of strings representing the sha256 of cached tts, loaded at init based on files present
+
+func init() {
+	cache = []string{}
+	files, err := os.ReadDir("tts_cache")
 	if err != nil {
-		log.Println("Couldn't get TTS: ", err.Error())
-		return err
+		log.Fatal(err)
 	}
-	wave := rl.NewWave(uint32(len(audioBytes)/2), ttsSampleRate, 16, 1, audioBytes[44:])
-	sound := rl.LoadSoundFromWave(wave)
+	for _, file := range files {
+		fmt.Println(file.Name())
+		cache = append(cache, file.Name())
+	}
+}
+
+func speak(txt string, shouldCache bool) error {
+	var hash string
+	var cached bool
+	if shouldCache {
+		txt = strings.ToLower(txt)
+		h := sha256.New()
+		h.Write([]byte(txt))
+		hash = fmt.Sprintf("%x", h.Sum(nil))
+		fmt.Println(hash)
+		for _, s := range cache {
+			if s == hash+".wav" {
+				fmt.Println("we cached")
+				cached = true
+			}
+		}
+	}
+	var audioBytes []byte
+	var err error
+	var sound rl.Sound
+	if !cached {
+		audioBytes, err = getTTS(txt)
+		if err != nil {
+			log.Println("Couldn't get TTS: ", err.Error())
+			return err
+		}
+		if shouldCache {
+			err = os.WriteFile(fmt.Sprintf("tts_cache/%s.wav", hash), audioBytes, 0666)
+			if err != nil {
+				log.Println("unable to write wave to file", err.Error())
+			}
+		}
+		wave := rl.NewWave(uint32(len(audioBytes)/2), ttsSampleRate, 16, 1, audioBytes[44:])
+		sound = rl.LoadSoundFromWave(wave)
+	} else {
+		sound = rl.LoadSound(fmt.Sprintf("tts_cache/%s.wav", hash))
+	}
 	rl.PlaySoundMulti(sound)
 	return nil
 }
