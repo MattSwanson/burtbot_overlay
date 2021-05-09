@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	texttospeech "cloud.google.com/go/texttospeech/apiv1"
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -39,10 +40,8 @@ func speak(txt string, shouldCache bool) error {
 		h := sha256.New()
 		h.Write([]byte(txt))
 		hash = fmt.Sprintf("%x", h.Sum(nil))
-		fmt.Println(hash)
 		for _, s := range cache {
 			if s == hash+".wav" {
-				fmt.Println("we cached")
 				cached = true
 			}
 		}
@@ -57,15 +56,31 @@ func speak(txt string, shouldCache bool) error {
 			return err
 		}
 		if shouldCache {
-			err = os.WriteFile(fmt.Sprintf("tts_cache/%s.wav", hash), audioBytes, 0666)
+			filename := fmt.Sprintf("tts_cache/%s.wav", hash)
+			err = os.WriteFile(filename, audioBytes, 0666)
 			if err != nil {
 				log.Println("unable to write wave to file", err.Error())
+			} else {
+				cache = append(cache, filename)
 			}
 		}
 		wave := rl.NewWave(uint32(len(audioBytes)/2), ttsSampleRate, 16, 1, audioBytes[44:])
 		sound = rl.LoadSoundFromWave(wave)
 	} else {
 		sound = rl.LoadSound(fmt.Sprintf("tts_cache/%s.wav", hash))
+	}
+	if rl.GetSoundsPlaying() >= 16 {
+		fmt.Println("TOO MUCH SOUNDS PLZ SOPT")
+		// queue this sound up to be played when able?
+		go func(sound rl.Sound) {
+			for {
+				time.Sleep(time.Millisecond * 50)
+				if rl.GetSoundsPlaying() < 16 {
+					rl.PlaySoundMulti(sound)
+					break
+				}
+			}
+		}(sound)
 	}
 	rl.PlaySoundMulti(sound)
 	return nil
