@@ -1,16 +1,14 @@
 package plinko
 
 import (
-	"github.com/MattSwanson/raylib-go/physics"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 type peg struct {
-	x        float64
-	y        float64
-	radius   float64
-	img      rl.Texture2D
-	physBody *physics.Body
+	x      float64
+	y      float64
+	radius float64
+	img    rl.Texture2D
 }
 
 func (p *peg) Draw() {

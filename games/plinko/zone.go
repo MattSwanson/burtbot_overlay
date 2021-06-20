@@ -18,7 +18,7 @@ type zone struct {
 
 func NewZone(rect fRect, n int) *zone {
 	r := uint8(float64(n) / 10.0 * 255.0)
-	img := rl.GenImageColor(int(rect.Dx()), int(rect.Dy()), rl.Color{r, 0x00, 0x00, 0x33})
+	img := rl.GenImageColor(int(rect.Dx()), int(rect.Dy()), rl.Color{R: r, G: 0x00, B: 0x00, A: 0x33})
 	return &zone{
 		x:           rect.min.x,
 		y:           rect.min.y,
