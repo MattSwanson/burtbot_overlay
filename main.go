@@ -366,7 +366,7 @@ func (g *Game) Update() {
 			}
 		case MiracleCmd:
 			g.showWhip = true
-			rl.PlaySoundMulti(g.sounds["indigo"])
+			sound.Play("indigo")
 			go func() {
 				time.Sleep(time.Second * 5)
 				g.showWhip = false
@@ -699,12 +699,12 @@ func (g *Game) newGopher(n int) {
 		g.sprites.num++
 
 	}
-	rl.PlaySound(g.sounds["eep"])
+	sound.Play("eep")
 }
 
 func (g *Game) destroyGophers() {
 	if g.sprites.num > 0 {
-		rl.PlaySoundMulti(g.sounds["logjam"])
+		sound.Play("logjam")
 	}
 	g.sprites.num = 0
 	g.sprites.sprites = make([]*Sprite, maxSprites)
@@ -715,7 +715,7 @@ func (g *Game) hideGopher() {
 		return
 	}
 	if g.sprites.sprites[0].draw {
-		rl.PlaySoundMulti(g.sounds["whit"])
+		sound.Play("whit")
 	}
 	g.sprites.sprites[0].draw = false
 }
@@ -725,7 +725,7 @@ func (g *Game) showGopher() {
 		return
 	}
 	if !g.sprites.sprites[0].draw {
-		rl.PlaySoundMulti(g.sounds["eep"])
+		sound.Play("eep")
 	}
 	g.sprites.sprites[0].draw = true
 }
@@ -735,7 +735,7 @@ func (g *Game) setGopherSize(size float64) {
 		return
 	}
 	if size >= g.sprites.sprites[0].objScale*2 && g.sprites.sprites[0].draw {
-		rl.PlaySoundMulti(g.sounds["boing"])
+		sound.Play("boing")
 	}
 	g.sprites.sprites[0].SetScale(size)
 }
@@ -743,7 +743,7 @@ func (g *Game) setGopherSize(size float64) {
 func (g *Game) quack(n int) {
 	go func() {
 		for i := 1; i <= n; i++ {
-			rl.PlaySoundMulti(g.sounds["quack"])
+			sound.Play("quack")
 			time.Sleep(time.Millisecond * 200)
 		}
 	}()
