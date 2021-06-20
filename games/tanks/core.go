@@ -219,6 +219,10 @@ func (c *Core) Update(delta float64) error {
 					c.gameOver = true
 					c.gameStarted = false
 					rl.PlaySoundMulti(c.sounds["indigo"])
+					go func() {
+						time.Sleep(5 * time.Second)
+						c.Reset()
+					}()
 					return nil
 				} else {
 					rl.PlaySoundMulti(c.sounds["sosumi"])
@@ -248,6 +252,7 @@ func (c *Core) Update(delta float64) error {
 		// if the y position is lower than the height of the terrain at that x pos...
 		if cpy >= c.heightMap[cpx] {
 			// thunk
+			rl.PlaySoundMulti(c.sounds["kerplunk"])
 			c.projectile = nil
 			c.advanceTurn(-1)
 			return nil
