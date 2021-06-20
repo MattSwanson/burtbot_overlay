@@ -15,8 +15,6 @@ type box struct {
 }
 
 func NewBox(bounds fRect, color color.RGBA) *box {
-	// img := rl.NewImage(int(bounds.Dx()), int(bounds.Dy()))
-	// img.Fill(color)
 	img := rl.GenImageColor(int(bounds.Dx()), int(bounds.Dy()), rl.Color{R: color.R, G: color.G, B: color.B, A: color.A})
 	return &box{
 		img: rl.LoadTextureFromImage(img),

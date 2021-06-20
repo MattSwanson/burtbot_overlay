@@ -5,15 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"log"
 	"math"
-	"os"
 	"time"
 
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
-
-	"github.com/MattSwanson/raylib-go/physics"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -26,8 +20,6 @@ const (
 	numDropQueues int     = 5
 )
 
-var gameFont font.Face
-var playerLabelFont font.Face
 var tokenImg rl.Texture2D
 var barrierImg rl.Texture2D
 var timerChannel chan bool
@@ -134,43 +126,9 @@ func (tq *tokenQueue) pop() (*token, error) {
 
 func Load(screenWidth, screenHeight float64, wc chan string) *Core {
 	timerChannel = make(chan bool)
-	bs, err := os.ReadFile("caskaydia.TTF")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tt, err := opentype.Parse(bs)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	const dpi = 72
-	gameFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    64,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	playerLabelFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    24,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	tokenImg = rl.LoadTexture("./images/plinko/white_token.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	barrierImg = rl.LoadTexture("./images/plinko/triangle.png")
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	pegs := generatePegs(screenWidth, screenHeight)
 	//dropPoints := []fPoint{}
@@ -342,33 +300,6 @@ func (c *Core) CheckForCollision(delta float64) {
 			}
 		}
 
-		// boundary collisions
-		// for _, box := range c.boxes {
-		// 	dY := math.Abs((box.y + 0.5*box.h) - (b.y + b.radius))
-		// 	dX := math.Abs((box.x + 0.5*box.w) - (b.x + b.radius))
-		// 	if dY < 0.5*box.h+b.radius && dX < box.w/2 {
-		// 		b.vy = -b.vy * 0.6
-		// 		b.vx = b.vx * 0.6
-		// 		b.y = box.y - 2.0*b.radius
-		// 		if math.Abs(b.vy) > 25 {
-		// 			c.sounds["boing"].Rewind()
-		// 			c.sounds["boing"].Play()
-		// 		}
-		// 	} else if dX < b.radius+0.5*box.w && dY < box.h/2-b.radius {
-		// 		b.vx = -b.vx * 0.6
-		// 		if b.vx > 0 {
-		// 			b.x = box.x + box.w
-		// 		} else {
-		// 			b.x = box.x - 2.0*b.radius
-		// 		}
-		// 		b.vy = b.vy * 0.6
-		// 		if math.Abs(b.vx) > 25 {
-		// 			c.sounds["boing"].Rewind()
-		// 			c.sounds["boing"].Play()
-		// 		}
-		// 	}
-		// }
-
 		// zone "collisions"
 		// all zones min y is 1225.0
 		if b.y > 1400 {
@@ -385,7 +316,6 @@ func (c *Core) CheckForCollision(delta float64) {
 			b.falling = false
 			fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, c.rewardMultiplier)
-			physics.DestroyBody(c.tokens[idx].physBody)
 			c.tokens = removeBall(c.tokens, idx)
 		}
 	}

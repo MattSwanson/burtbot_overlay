@@ -1,20 +1,17 @@
 package plinko
 
 import (
-	"github.com/MattSwanson/raylib-go/physics"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 type barrier struct {
-	x        float64
-	y        float64
-	w        float64
-	h        float64
-	rebound  float64
-	sprite   rl.Texture2D
-	collImg  rl.Texture2D
-	physBody *physics.Body
-	bounds   []edge
+	x       float64
+	y       float64
+	w       float64
+	h       float64
+	rebound float64
+	sprite  rl.Texture2D
+	bounds  []edge
 }
 
 func NewBarrier(sprite rl.Texture2D) *barrier {
@@ -46,8 +43,6 @@ func (b *barrier) Draw() {
 func (b *barrier) GetRebound() float64 {
 	return b.rebound
 }
-
-type bounds []edge
 
 // edge should be defined in ccw manner
 type edge struct {

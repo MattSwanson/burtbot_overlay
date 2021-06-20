@@ -5,7 +5,6 @@ import (
 	"log"
 	"math/rand"
 
-	"github.com/MattSwanson/raylib-go/physics"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -25,7 +24,6 @@ type token struct {
 	playerName  string
 	playerColor rl.Color
 	labelOffset fPoint
-	physBody    *physics.Body
 }
 
 func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint) *token {
