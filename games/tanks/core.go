@@ -38,39 +38,6 @@ type Core struct {
 }
 
 func Load(sWidth, sHeight int) *Core {
-	// bs, err := os.ReadFile("caskaydia.TTF")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// tt, err := opentype.Parse(bs)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// const dpi = 72
-	// playerLabelFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-	// 	Size:    24,
-	// 	DPI:     dpi,
-	// 	Hinting: font.HintingFull,
-	// })
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// instFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-	// 	Size:    48,
-	// 	DPI:     dpi,
-	// 	Hinting: font.HintingFull,
-	// })
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// winnerFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-	// 	Size:    72,
-	// 	DPI:     dpi,
-	// 	Hinting: font.HintingFull,
-	// })
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
 
 	boomImg = rl.LoadTexture("./images/tanks/tanks_boom.png")
 
@@ -159,38 +126,6 @@ func (c *Core) Update(delta float64) error {
 	}
 	for _, v := range targets {
 		tank := c.tanks[v]
-		// diag := math.Sqrt(tank.w*tank.w + tank.h*tank.h)
-		// maxDist := diag + 2*tank.w
-		// var totalDist float64
-		// for _, e := range tank.bounds {
-		// 	dx := e.x0 - c.projectile.x + c.projectile.radius
-		// 	dy := e.y0 - c.projectile.y + c.projectile.radius
-		// 	totalDist += math.Sqrt(dx*dx + dy*dy)
-		// }
-		// if totalDist <= maxDist {
-		// 	// ded?
-		// 	c.boomX, c.boomY = tank.cx-float64(boomImg.Bounds().Dx())/2, tank.cy-float64(boomImg.Bounds().Dy())/2
-		// 	c.boomTime = time.Now()
-		// 	c.showBoom = true
-		// 	c.tanks = removeTank(c.tanks, k)
-		// 	c.projectile = nil
-		// 	if len(c.tanks) == 1 {
-		// 		// win screen
-		// 		// winrar(c.tanks[0])
-		// 		c.winner = c.tanks[0].playerName
-		// 		c.winnerImg = c.tanks[0].img
-		// 		c.gameOver = true
-		// 		c.gameStarted = false
-		// 		c.sounds["indigo"].Rewind()
-		// 		c.sounds["indigo"].Play()
-		// 		return nil
-		// 	} else {
-		// 		c.sounds["sosumi"].Rewind()
-		// 		c.sounds["sosumi"].Play()
-		// 	}
-		// 	c.advanceTurn(k)
-		// 	return nil
-		// }
 		maxDist := math.Sqrt(tank.w*tank.w+tank.h*tank.h) + 8
 		dst := math.Sqrt((tank.cx-c.projectile.x)*(tank.cx-c.projectile.x) + (tank.cy-c.projectile.y)*(tank.cy-c.projectile.y))
 		// if we aren't close enough for a collision to happen don't even bother checking anymore

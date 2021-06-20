@@ -135,10 +135,5 @@ func (t *tank) Draw(myTurn bool) {
 	}
 
 	rl.DrawTextureEx(t.img, rl.Vector2{X: float32(t.x + xOffset), Y: float32(t.y + yOffset)}, float32(t.a*180/math.Pi), float32(t.scale), rl.White)
-
-	for _, b := range t.bounds {
-		rl.DrawLine(int32(b.x0), int32(b.y0), int32(b.x1), int32(b.y1), rl.Red)
-	}
-
 	rl.DrawText(t.playerName, int32(t.x+t.w/2+10), int32(t.y-t.h), 24, textColor)
 }
