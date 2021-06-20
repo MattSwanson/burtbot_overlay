@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -34,10 +35,9 @@ type Core struct {
 	boomX         float64
 	boomY         float64
 	boomTime      time.Time
-	sounds        map[string]rl.Sound
 }
 
-func Load(sWidth, sHeight int, sounds map[string]rl.Sound) *Core {
+func Load(sWidth, sHeight int) *Core {
 	// bs, err := os.ReadFile("caskaydia.TTF")
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -90,7 +90,6 @@ func Load(sWidth, sHeight int, sounds map[string]rl.Sound) *Core {
 		wind:         w,
 		screenWidth:  sWidth,
 		screenHeight: sHeight,
-		sounds:       sounds,
 	}
 }
 
@@ -218,14 +217,14 @@ func (c *Core) Update(delta float64) error {
 					c.winnerImg = c.tanks[0].img
 					c.gameOver = true
 					c.gameStarted = false
-					rl.PlaySoundMulti(c.sounds["indigo"])
+					sound.Play("indigo")
 					go func() {
 						time.Sleep(5 * time.Second)
 						c.Reset()
 					}()
 					return nil
 				} else {
-					rl.PlaySoundMulti(c.sounds["sosumi"])
+					sound.Play("sosumi")
 				}
 				c.advanceTurn(v)
 				return nil
@@ -252,7 +251,7 @@ func (c *Core) Update(delta float64) error {
 		// if the y position is lower than the height of the terrain at that x pos...
 		if cpy >= c.heightMap[cpx] {
 			// thunk
-			rl.PlaySoundMulti(c.sounds["kerplunk"])
+			sound.Play("kerplunk")
 			c.projectile = nil
 			c.advanceTurn(-1)
 			return nil

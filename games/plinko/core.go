@@ -41,7 +41,6 @@ type Core struct {
 	goalZones        []*zone
 	barriers         []*barrier
 	queues           []tokenQueue
-	sounds           map[string]rl.Sound
 	currentDropPoint int
 	rewardMultiplier int
 	writeChannel     chan string
@@ -133,7 +132,7 @@ func (tq *tokenQueue) pop() (*token, error) {
 	return t, nil
 }
 
-func Load(screenWidth, screenHeight float64, wc chan string, sounds map[string]rl.Sound) *Core {
+func Load(screenWidth, screenHeight float64, wc chan string) *Core {
 	timerChannel = make(chan bool)
 	bs, err := os.ReadFile("caskaydia.TTF")
 	if err != nil {
@@ -193,7 +192,6 @@ func Load(screenWidth, screenHeight float64, wc chan string, sounds map[string]r
 	c := Core{
 		tokens:           tokens,
 		pegs:             pegs,
-		sounds:           sounds,
 		currentDropPoint: 2,
 		queues:           tokenQueues,
 		barriers:         barriers,

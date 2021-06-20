@@ -19,6 +19,7 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
 	"golang.org/x/image/font"
 	"golang.org/x/net/context"
@@ -35,9 +36,7 @@ var mwhipImg rl.Texture2D
 var acceptedHosts []string
 
 const (
-	audioSampleRate         = 44100
-	soundVolume     float32 = 0.75
-	listenAddr              = ":8081"
+	listenAddr = ":8081"
 )
 
 func init() {
@@ -46,18 +45,18 @@ func init() {
 	// ga.audioContext = audio.NewContext(44100)
 	// ga.showStatic = false
 	// ga.staticLayer = static{noiseImage: image.NewRGBA(image.Rect(0, 0, screenWidth, screenHeight))}
-	ga.sounds = map[string]rl.Sound{}
-	ga.sounds["eep"] = rl.LoadSound("sounds/wildeep.wav")
-	ga.sounds["whit"] = rl.LoadSound("sounds/Whit.wav")
-	ga.sounds["boing"] = rl.LoadSound("sounds/Boing.wav")
-	ga.sounds["quack"] = rl.LoadSound("sounds/Quack.wav")
-	ga.sounds["zap"] = rl.LoadSound("sounds/Voltage.wav")
-	ga.sounds["logjam"] = rl.LoadSound("sounds/Logjam.wav")
-	ga.sounds["bip"] = rl.LoadSound("sounds/Bip.wav")
-	ga.sounds["squeek"] = rl.LoadSound("sounds/ChuToy.wav")
-	ga.sounds["indigo"] = rl.LoadSound("sounds/Indigo.wav")
-	ga.sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
-	ga.sounds["kerplunk"] = rl.LoadSound("sounds/kerplunk.wav")
+	// ga.sounds = map[string]rl.Sound{}
+	// ga.sounds["eep"] = rl.LoadSound("sounds/wildeep.wav")
+	// ga.sounds["whit"] = rl.LoadSound("sounds/Whit.wav")
+	// ga.sounds["boing"] = rl.LoadSound("sounds/Boing.wav")
+	// ga.sounds["quack"] = rl.LoadSound("sounds/Quack.wav")
+	// ga.sounds["zap"] = rl.LoadSound("sounds/Voltage.wav")
+	// ga.sounds["logjam"] = rl.LoadSound("sounds/Logjam.wav")
+	// ga.sounds["bip"] = rl.LoadSound("sounds/Bip.wav")
+	// ga.sounds["squeek"] = rl.LoadSound("sounds/ChuToy.wav")
+	// ga.sounds["indigo"] = rl.LoadSound("sounds/Indigo.wav")
+	// ga.sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
+	// ga.sounds["kerplunk"] = rl.LoadSound("sounds/kerplunk.wav")
 
 	// // font init
 	// bs, err := os.ReadFile("caskaydia.TTF")
@@ -479,7 +478,7 @@ func main() {
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
-	rl.SetMasterVolume(soundVolume)
+	rl.SetMasterVolume(sound.MasterVolume)
 
 	physics.Init()
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
@@ -520,13 +519,13 @@ func main() {
 			go handleConnection(conn, c, wc)
 		}
 	}(game.commChannel, ga.connWriteChan)
-	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan, game.sounds)
+	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan)
 	defer game.plinko.CancelTimer()
 	game.plinkoRunning = true
 	//game.plinkoRunning = true
-	game.snakeGame = newSnake(game.sounds)
+	game.snakeGame = newSnake()
 	// // game.bigMouseImg = sprites[2]
-	game.tanks = tanks.Load(screenWidth, screenHeight, game.sounds)
+	game.tanks = tanks.Load(screenWidth, screenHeight)
 	// //game.tanksRunning = true
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.lightsout = lightsout.NewGame(5, 5)

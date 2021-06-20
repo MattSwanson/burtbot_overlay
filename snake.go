@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -38,19 +39,17 @@ type Snake struct {
 	score         int
 	bestScore     int
 	level         int
-	sounds        map[string]rl.Sound
 }
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func newSnake(sounds map[string]rl.Sound) *Snake {
+func newSnake() *Snake {
 	s := &Snake{
 		apple:     Position{X: gridSize, Y: gridSize},
 		moveTime:  initialMoveSpeed,
 		snakeBody: make([]Position, 1),
-		sounds:    sounds,
 	}
 	s.snakeBody[0].X = xNumInScreen / 2
 	s.snakeBody[0].Y = yNumInScreen / 2
@@ -120,12 +119,12 @@ func (s *Snake) Update(currentInput int) error {
 		}
 
 		if s.collidesWithSelf() {
-			rl.PlaySoundMulti(s.sounds["zap"])
+			sound.Play("zap")
 			s.reset()
 		}
 
 		if s.collidesWithApple() {
-			rl.PlaySoundMulti(s.sounds["squeek"])
+			sound.Play("squeek")
 			s.apple.X = rand.Intn(xNumInScreen - 1)
 			s.apple.Y = rand.Intn(yNumInScreen - 1)
 			s.snakeBody = append(s.snakeBody, Position{
