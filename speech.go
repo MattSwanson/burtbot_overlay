@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -65,7 +66,14 @@ func speak(txt string, shouldCache bool) error {
 			}
 		}
 		wave := rl.NewWave(uint32(len(audioBytes)/2), ttsSampleRate, 16, 1, audioBytes[44:])
+		// garbage := []byte{}
+		// for i := 0; i < 100000; i++ {
+		// 	garbage = append(garbage, byte(rand.Intn(256)))
+		// }
+		//garbageWave := rl.NewWave(uint32(len(garbage)/2), 11000, 16, 1, garbage)
+		//garbageSound := rl.LoadSoundFromWave(garbageWave)
 		sound = rl.LoadSoundFromWave(wave)
+		//rl.PlaySoundMulti(garbageSound)
 	} else {
 		sound = rl.LoadSound(fmt.Sprintf("tts_cache/%s.wav", hash))
 	}
@@ -95,6 +103,8 @@ func getTTS(txt string) ([]byte, error) {
 		return nil, err
 	}
 
+	speed := rand.Float64() + 0.5
+
 	req := texttospeechpb.SynthesizeSpeechRequest{
 		// set the text input to be synthesized
 		Input: &texttospeechpb.SynthesisInput{
@@ -112,6 +122,7 @@ func getTTS(txt string) ([]byte, error) {
 		AudioConfig: &texttospeechpb.AudioConfig{
 			AudioEncoding:   texttospeechpb.AudioEncoding_LINEAR16,
 			SampleRateHertz: 44100,
+			SpeakingRate:    speed,
 		},
 	}
 
