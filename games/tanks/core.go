@@ -220,8 +220,9 @@ func (c *Core) Update(delta float64) error {
 					sound.Play("indigo")
 					go func() {
 						time.Sleep(5 * time.Second)
-						c.Reset()
+						c.gameOver = false
 					}()
+					c.Reset()
 					return nil
 				} else {
 					sound.Play("sosumi")
@@ -265,7 +266,6 @@ func (c *Core) Update(delta float64) error {
 
 func (c *Core) Reset() {
 	c.gameStarted = false
-	c.gameOver = false
 	c.terrainImg, c.heightMap = generateTerrain(c.screenWidth, c.screenHeight)
 	c.tanks = []*tank{}
 	c.playersJoined = 0
