@@ -21,16 +21,13 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
 	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
-	"golang.org/x/image/font"
 	"golang.org/x/net/context"
 
-	"github.com/MattSwanson/raylib-go/physics"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 //var startTime time.Time
 var ga Game
-var myFont font.Face
 var mpos rl.Vector2
 var mwhipImg rl.Texture2D
 var acceptedHosts []string
@@ -40,48 +37,9 @@ const (
 )
 
 func init() {
-	//var err error
-	//audio init
-	// ga.audioContext = audio.NewContext(44100)
-	// ga.showStatic = false
-	// ga.staticLayer = static{noiseImage: image.NewRGBA(image.Rect(0, 0, screenWidth, screenHeight))}
-	// ga.sounds = map[string]rl.Sound{}
-	// ga.sounds["eep"] = rl.LoadSound("sounds/wildeep.wav")
-	// ga.sounds["whit"] = rl.LoadSound("sounds/Whit.wav")
-	// ga.sounds["boing"] = rl.LoadSound("sounds/Boing.wav")
-	// ga.sounds["quack"] = rl.LoadSound("sounds/Quack.wav")
-	// ga.sounds["zap"] = rl.LoadSound("sounds/Voltage.wav")
-	// ga.sounds["logjam"] = rl.LoadSound("sounds/Logjam.wav")
-	// ga.sounds["bip"] = rl.LoadSound("sounds/Bip.wav")
-	// ga.sounds["squeek"] = rl.LoadSound("sounds/ChuToy.wav")
-	// ga.sounds["indigo"] = rl.LoadSound("sounds/Indigo.wav")
-	// ga.sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
-	// ga.sounds["kerplunk"] = rl.LoadSound("sounds/kerplunk.wav")
-
-	// // font init
-	// bs, err := os.ReadFile("caskaydia.TTF")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// tt, err := opentype.Parse(bs)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// const dpi = 72
-	// myFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
-	// 	Size:    36,
-	// 	DPI:     dpi,
-	// 	Hinting: font.HintingFull,
-	// })
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// ga.marquees = []*Marquee{}
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
-	//startTime = time.Now()
 
 	bs, err := os.ReadFile("./accepted_hosts")
 	if err != nil {
@@ -101,7 +59,6 @@ type Game struct {
 	sprites         Sprites
 	commChannel     chan cmd
 	connWriteChan   chan string
-	sounds          map[string]rl.Sound
 	showStatic      bool
 	staticLayer     static
 	gameRunning     bool
@@ -121,7 +78,7 @@ type Game struct {
 	bingoOverlay    *visuals.BingoOverlay
 	lastUpdate      time.Time
 	showWhip        bool
-	errorBox        *visuals.ErrorBox
+	errorManager    *visuals.ErrorManager
 }
 
 type cmd struct {
@@ -169,30 +126,17 @@ var connMessages = []string{
 
 func (g *Game) Update() {
 	delta := float64(time.Since(g.lastUpdate).Milliseconds())
-	physics.Update()
 	select {
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(rl.KeyUp):
 			g.currentInput = rl.KeyUp
-		// 	if g.sprites.num != 0 {
-		// 		g.sprites.sprites[0].posY -= 4.0
-		// 	}
 		case int(rl.KeyDown):
 			g.currentInput = rl.KeyDown
-		// 	if g.sprites.num != 0 {
-		// 		g.sprites.sprites[0].posY += 4.0
-		// 	}
 		case int(rl.KeyLeft):
 			g.currentInput = rl.KeyLeft
-		// 	if g.sprites.num != 0 {
-		// 		g.sprites.sprites[0].posX -= 4.0
-		// 	}
 		case int(rl.KeyRight):
 			g.currentInput = rl.KeyRight
-		// 	if g.sprites.num != 0 {
-		// 		g.sprites.sprites[0].posX += 4.0
-		// 	}
 
 		case SpawnGopher:
 			if num, err := strconv.Atoi(key.args[0]); err != nil {
@@ -237,14 +181,6 @@ func (g *Game) Update() {
 				g.marquees = []*Marquee{}
 				return
 			}
-			// } else if key.args[0] == "embiggen" {
-			// 	g.marquee.Embiggen()
-			// 	return nil
-			// } else if key.args[0] == "smol" {
-			// 	g.marquee.Smol()
-			// 	return nil
-			// }
-			//g.marquee.setText(key.args[0])
 			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
 			m.setText(key.args[0])
 			g.marquees = append(g.marquees, m)
@@ -330,7 +266,6 @@ func (g *Game) Update() {
 			}
 		case LightsOutCmd:
 			if key.args[0] == "start" && !g.lightsRunning {
-				//g.lightsout.Reset()
 				g.lightsout.LoadPuzzle(0)
 				g.lightsRunning = true
 				break
@@ -380,9 +315,11 @@ func (g *Game) Update() {
 				visuals.SetLightsColor(color)
 			}
 		case ErrorCmd:
-			if !g.errorBox.Visible {
-				g.errorBox.ShowError()
-			}
+			g.errorManager.AddError(5)
+			go func() {
+				time.Sleep(time.Second * 5)
+				g.errorManager.Clear()
+			}()
 		}
 	default:
 	}
@@ -411,8 +348,8 @@ func (g *Game) Update() {
 	if g.tanksRunning {
 		g.tanks.Update(delta)
 	}
-	if g.errorBox.Visible {
-		g.errorBox.Update(delta)
+	if g.errorManager.Visible {
+		g.errorManager.Update(delta)
 	}
 
 	for i := 0; i < g.sprites.num; i++ {
@@ -428,7 +365,7 @@ func (g *Game) Draw() {
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
 	rl.DrawFPS(50, 50)
 
-	g.errorBox.Draw()
+	g.errorManager.Draw()
 
 	if g.bigMouse {
 		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
@@ -480,7 +417,6 @@ func main() {
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 
-	physics.Init()
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	LoadSprites()
 	visuals.LoadBopometerAssets()
@@ -522,30 +458,17 @@ func main() {
 	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan)
 	defer game.plinko.CancelTimer()
 	game.plinkoRunning = true
-	//game.plinkoRunning = true
 	game.snakeGame = newSnake()
-	// // game.bigMouseImg = sprites[2]
 	game.tanks = tanks.Load(screenWidth, screenHeight)
-	// //game.tanksRunning = true
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.lightsout = lightsout.NewGame(5, 5)
 	game.bingoOverlay = visuals.NewBingoOverlay()
-	game.errorBox = visuals.NewErrorBox()
-	// _, err = getAvailableVoices()
-	// if err != nil {
-	// 	log.Println(err.Error())
-	// }
-	//fmt.Println(voices)
-	//hm := tanks.GenerateHeightmap()
-	//fmt.Println(hm)
-	// if err := ebiten.RunGame(game); err != nil {
-	// 	log.Fatal(err)
-	// }
+	game.errorManager = visuals.NewErrorManager()
+
 	for !rl.WindowShouldClose() {
 		game.Update()
 		game.Draw()
 	}
-	physics.Close()
 	rl.CloseAudioDevice()
 	rl.CloseWindow()
 }
