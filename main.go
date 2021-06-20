@@ -11,6 +11,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,10 +32,12 @@ var ga Game
 var myFont font.Face
 var mpos rl.Vector2
 var mwhipImg rl.Texture2D
+var acceptedHosts []string
 
 const (
 	audioSampleRate         = 44100
-	soundVolume     float64 = 0.25
+	soundVolume     float32 = 0.75
+	listenAddr              = ":8081"
 )
 
 func init() {
@@ -54,6 +57,7 @@ func init() {
 	ga.sounds["squeek"] = rl.LoadSound("sounds/ChuToy.wav")
 	ga.sounds["indigo"] = rl.LoadSound("sounds/Indigo.wav")
 	ga.sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
+	ga.sounds["kerplunk"] = rl.LoadSound("sounds/kerplunk.wav")
 
 	// // font init
 	// bs, err := os.ReadFile("caskaydia.TTF")
@@ -79,6 +83,19 @@ func init() {
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
 	//startTime = time.Now()
+
+	bs, err := os.ReadFile("./accepted_hosts")
+	if err != nil {
+		log.Fatalln("couldn't load accepted hosts")
+	}
+	s := string(bs)
+	addrs := strings.Fields(s)
+	for _, addr := range addrs {
+		if net.ParseIP(addr) == nil {
+			log.Fatalln("Invalid IP address in accepted_hosts file")
+		}
+	}
+	acceptedHosts = addrs
 }
 
 type Game struct {
@@ -102,8 +119,10 @@ type Game struct {
 	marquees        []*Marquee
 	marqueesEnabled bool
 	bopometer       *visuals.Bopometer
+	bingoOverlay    *visuals.BingoOverlay
 	lastUpdate      time.Time
 	showWhip        bool
+	errorBox        *visuals.ErrorBox
 }
 
 type cmd struct {
@@ -128,6 +147,9 @@ const (
 	BopCmd
 	MiracleCmd
 	LightsOutCmd
+	BingoCmd
+	LightsCmd
+	ErrorCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -245,19 +267,23 @@ func (g *Game) Update() {
 				// !plinko drop n username
 				// drop a token at drop position n for the given username
 				if key.args[0] == "drop" {
+					color := "#0000FF"
 					if len(key.args) < 3 {
 						return
+					}
+					if len(key.args) >= 4 {
+						color = key.args[3]
 					}
 					// make sure we get an integer for drop position
 					n, err := strconv.Atoi(key.args[1])
 					if err != nil {
 						// for testing:
 						if key.args[1] == "all" {
-							g.plinko.DropAll(key.args[2], key.args[3])
+							g.plinko.DropAll(key.args[2], color)
 						}
 						return
 					}
-					g.plinko.DropBall(n, key.args[2], key.args[3])
+					g.plinko.DropBall(n, key.args[2], color)
 				}
 			}
 		case TanksCmd:
@@ -325,6 +351,20 @@ func (g *Game) Update() {
 				}
 				g.lightsout.Press(n)
 			}
+		case BingoCmd:
+			if key.args[0] == "drawn" {
+				if len(key.args) < 2 {
+					break
+				}
+				g.bingoOverlay.AddNumber(key.args[1])
+			} else if key.args[0] == "reset" {
+				g.bingoOverlay.Reset()
+			} else if key.args[0] == "winner" {
+				if len(key.args) < 3 {
+					break
+				}
+				g.bingoOverlay.End(key.args[1], key.args[2])
+			}
 		case MiracleCmd:
 			g.showWhip = true
 			rl.PlaySoundMulti(g.sounds["indigo"])
@@ -332,6 +372,18 @@ func (g *Game) Update() {
 				time.Sleep(time.Second * 5)
 				g.showWhip = false
 			}()
+		case LightsCmd:
+			if key.args[0] == "set" {
+				color, err := strconv.Atoi(key.args[1])
+				if err != nil {
+					break
+				}
+				visuals.SetLightsColor(color)
+			}
+		case ErrorCmd:
+			if !g.errorBox.Visible {
+				g.errorBox.ShowError()
+			}
 		}
 	default:
 	}
@@ -360,6 +412,9 @@ func (g *Game) Update() {
 	if g.tanksRunning {
 		g.tanks.Update(delta)
 	}
+	if g.errorBox.Visible {
+		g.errorBox.Update(delta)
+	}
 
 	for i := 0; i < g.sprites.num; i++ {
 		if err := g.sprites.sprites[i].Update(delta); err != nil {
@@ -374,9 +429,11 @@ func (g *Game) Draw() {
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
 	rl.DrawFPS(50, 50)
 
-	// if g.bigMouse {
-	// 	rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
-	// }
+	g.errorBox.Draw()
+
+	if g.bigMouse {
+		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
+	}
 
 	if g.tanksRunning {
 		g.tanks.Draw()
@@ -412,6 +469,8 @@ func (g *Game) Draw() {
 		rl.DrawTextureEx(mwhipImg, rl.Vector2{X: 560, Y: 0}, 0, 0.6, rl.White)
 	}
 
+	g.bingoOverlay.Draw()
+
 	rl.EndDrawing()
 }
 
@@ -420,7 +479,7 @@ func main() {
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
-	rl.SetMasterVolume(0.2)
+	rl.SetMasterVolume(soundVolume)
 
 	physics.Init()
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
@@ -432,7 +491,7 @@ func main() {
 	game.bigMouseImg = sprites[2]
 	LoadMarqueeFonts()
 
-	ln, err := net.Listen("tcp", ":8081")
+	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -441,8 +500,22 @@ func main() {
 	go func(c chan cmd, wc chan string) {
 		for {
 			conn, err := ln.Accept()
+			fmt.Printf("Connection from %s\n", conn.RemoteAddr().String())
 			if err != nil {
 				log.Println(err)
+			}
+			remoteAddress := strings.Split(conn.RemoteAddr().String(), ":")
+			acceptedHost := false
+			for _, addr := range acceptedHosts {
+				if remoteAddress[0] == addr {
+					acceptedHost = true
+					break
+				}
+			}
+			if !acceptedHost {
+				go speak("Intrusion Detected", true)
+				conn.Close()
+				continue
 			}
 			go handleConnection(conn, c, wc)
 		}
@@ -457,6 +530,8 @@ func main() {
 	// //game.tanksRunning = true
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.lightsout = lightsout.NewGame(5, 5)
+	game.bingoOverlay = visuals.NewBingoOverlay()
+	game.errorBox = visuals.NewErrorBox()
 	// _, err = getAvailableVoices()
 	// if err != nil {
 	// 	log.Println(err.Error())
@@ -573,7 +648,22 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 				continue
 			}
 			c <- cmd{LightsOutCmd, fields[1:]}
+		case "bingo":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{BingoCmd, fields[1:]}
+			// j := fmt.Sprintf(`{"RawMessage":"%s", "Emotes":""}`, fields[2])
+			// c <- cmd{SingleMarqueeCmd, []string{j}}
+		case "lights":
+			if len(fields) < 3 {
+				continue
+			}
+			c <- cmd{LightsCmd, fields[1:]}
+		case "error":
+			c <- cmd{ErrorCmd, []string{}}
 		}
+
 		fmt.Println(fields)
 	}
 }
