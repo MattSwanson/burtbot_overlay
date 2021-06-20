@@ -31,7 +31,7 @@ func NewZone(rect fRect, n int) *zone {
 
 func (z *zone) Draw() {
 	rl.DrawTexture(z.img, int32(z.x), int32(z.y), rl.White)
-	rl.DrawText(fmt.Sprint(z.rewardValue), int32(z.x+z.w/2), int32(gameHeight-80), 64, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0x55})
+	rl.DrawText(fmt.Sprint(z.rewardValue), int32(z.x+z.w/2), int32(gameHeight-80), 64, rl.Color{R: 0xFF, G: 0x00, B: 0x00, A: 0xFF})
 }
 
 func (z *zone) Hit() {
