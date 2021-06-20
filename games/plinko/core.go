@@ -206,15 +206,15 @@ func Load(screenWidth, screenHeight float64, wc chan string, sounds map[string]r
 
 func (c *Core) CheckForCollision(delta float64) {
 
-	const drain float64 = 0.95
+	const drain float64 = 0.85
 	for idx, b := range c.tokens {
 		if !b.falling {
 			continue
 		}
 		// peg collisions
 		for _, peg := range c.pegs {
-			dx := b.x - peg.x
-			dy := b.y - peg.y
+			dx := (b.x + b.radius) - (peg.x + peg.radius)
+			dy := (b.y + b.radius) - (peg.y + peg.radius)
 			mag := math.Sqrt(dx*dx + dy*dy)
 			vmag := math.Sqrt(b.vx*b.vx + b.vy*b.vy)
 			if mag <= peg.radius+b.radius {
