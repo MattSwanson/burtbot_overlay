@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/MattSwanson/burtbot_overlay/sound"
@@ -35,6 +36,7 @@ type Core struct {
 	boomX         float64
 	boomY         float64
 	boomTime      time.Time
+	running       bool
 }
 
 func Load(sWidth, sHeight int) *Core {
@@ -81,6 +83,9 @@ func (c *Core) advanceTurn(i int) {
 }
 
 func (c *Core) Draw() {
+	if !c.running {
+		return
+	}
 	rl.DrawTexture(c.terrainImg, 0, 0, rl.White)
 	for i, tank := range c.tanks {
 		myTurn := c.currentTurn == i
@@ -112,7 +117,38 @@ func (c *Core) Draw() {
 	}
 }
 
+func (c *Core) HandleMessage(args []string) {
+	if args[0] == "start" {
+		c.running = true
+	} else if args[0] == "stop" {
+		c.running = false
+		c.Reset()
+	} else if args[0] == "join" {
+		if len(args) < 3 {
+			return
+		}
+		c.AddPlayer(args[1], args[2])
+	} else if args[0] == "reset" {
+		c.Reset()
+	} else if args[0] == "shoot" {
+		a, err := strconv.ParseFloat(args[2], 64)
+		if err != nil {
+			return
+		}
+		v, err := strconv.ParseFloat(args[3], 64)
+		if err != nil {
+			return
+		}
+		c.Shoot(args[1], a, v)
+	} else if args[0] == "begin" {
+		c.Begin()
+	}
+}
+
 func (c *Core) Update(delta float64) error {
+	if !c.running {
+		return nil
+	}
 	if c.projectile == nil {
 		return nil
 	}

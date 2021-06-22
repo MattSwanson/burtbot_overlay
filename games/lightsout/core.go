@@ -2,6 +2,7 @@ package lightsout
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -18,6 +19,7 @@ type Core struct {
 	numRows        int
 	currentPuzzle  int
 	puzzleComplete bool
+	running        bool
 }
 
 var puzzles = [][]int{
@@ -61,6 +63,30 @@ func NewGame(w, h int) *Core {
 		numColumns: w,
 		numRows:    h,
 	}
+}
+
+func (c *Core) HandleMessage(args []string) {
+	if args[0] == "start" && !c.running {
+		c.LoadPuzzle(0)
+		c.running = true
+		return
+	}
+	if !c.running {
+		return
+	}
+	if args[0] == "reset" {
+		c.Reset()
+		return
+	}
+	if args[0] == "stop" {
+		c.running = false
+		return
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil {
+		return
+	}
+	c.Press(n)
 }
 
 func (c *Core) Reset() {
@@ -127,6 +153,9 @@ func CheckForWin(board []*light) bool {
 }
 
 func (c *Core) Draw() {
+	if !c.running {
+		return
+	}
 	for k, l := range c.gameBoard {
 		l.Draw()
 		// x, y := k%c.numColumns, k/c.numRows

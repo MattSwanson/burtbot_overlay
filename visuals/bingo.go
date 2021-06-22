@@ -30,6 +30,22 @@ func (b *BingoOverlay) AddNumber(num string) {
 	b.currentNumber, b.previousNumbers = num, append(b.previousNumbers[1:], b.currentNumber)
 }
 
+func (b *BingoOverlay) HandleMessage(args []string) {
+	if args[0] == "drawn" {
+		if len(args) < 2 {
+			return
+		}
+		b.AddNumber(args[1])
+	} else if args[0] == "reset" {
+		b.Reset()
+	} else if args[0] == "winner" {
+		if len(args) < 3 {
+			return
+		}
+		b.End(args[1], args[2])
+	}
+}
+
 func (b *BingoOverlay) Draw() {
 	// draw the last drawn number
 	const rightEdge int32 = 2460

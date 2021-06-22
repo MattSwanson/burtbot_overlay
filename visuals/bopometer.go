@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strconv"
 	"time"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -45,6 +46,9 @@ func NewBopometer(wc chan string) *Bopometer {
 }
 
 func (b *Bopometer) Draw() {
+	if !b.running && !b.finished {
+		return
+	}
 	const textYOffset = 35.0
 	const textX = 200.0
 	const bopIndicatorX = 200.0
@@ -63,7 +67,29 @@ func (b *Bopometer) Draw() {
 	}
 }
 
+func (b *Bopometer) HandleMessage(args []string) {
+	if args[0] == "start" && !b.IsRunning() {
+		b.Reset()
+		b.SetRunning(true)
+	} else if args[0] == "add" && b.IsRunning() {
+		if len(args) < 2 {
+			return
+		}
+		n, err := strconv.Atoi(args[1])
+		if err != nil {
+			return
+		}
+		b.Add(n)
+	} else if args[0] == "stop" && b.IsRunning() {
+		b.Finish()
+		b.SetRunning(false)
+	}
+}
+
 func (b *Bopometer) Update(delta float64) error {
+	if !b.IsRunning() {
+		return nil
+	}
 	b.bopIndicatorY = 1400 - b.currentRating/10.0*1350
 	for k, bp := range b.bops {
 		bp.Update(delta)

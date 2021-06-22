@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strconv"
 	"time"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -350,6 +351,30 @@ func (c *Core) Update() error {
 	c.lastUpdate = time.Now()
 
 	return nil
+}
+
+func (c *Core) HandleMessage(args []string) {
+	// !plinko drop n username
+	// drop a token at drop position n for the given username
+	if args[0] == "drop" {
+		color := "#0000FF"
+		if len(args) < 3 {
+			return
+		}
+		if len(args) >= 4 {
+			color = args[3]
+		}
+		// make sure we get an integer for drop position
+		n, err := strconv.Atoi(args[1])
+		if err != nil {
+			// for testing:
+			if args[1] == "all" {
+				c.DropAll(args[2], color)
+			}
+			return
+		}
+		c.DropBall(n, args[2], color)
+	}
 }
 
 func (c *Core) Draw() {

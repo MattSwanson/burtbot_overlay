@@ -64,11 +64,8 @@ type Game struct {
 	gameRunning     bool
 	snakeGame       *Snake
 	plinko          *plinko.Core
-	plinkoRunning   bool
 	tanks           *tanks.Core
-	tanksRunning    bool
 	lightsout       *lightsout.Core
-	lightsRunning   bool
 	currentInput    int
 	bigMouse        bool
 	bigMouseImg     rl.Texture2D
@@ -88,9 +85,6 @@ type cmd struct {
 
 const (
 	SpawnGopher = iota
-	HideGopher
-	ShowGopher
-	SizeGopher
 	Quack
 	KillGophs
 	BigMouse
@@ -144,16 +138,6 @@ func (g *Game) Update() {
 			} else {
 				g.newGopher(num)
 			}
-		case HideGopher:
-			g.hideGopher()
-		case ShowGopher:
-			g.showGopher()
-		case SizeGopher:
-			if size, err := strconv.ParseFloat(key.args[0], 64); err != nil {
-				return
-			} else {
-				g.setGopherSize(size)
-			}
 		case KillGophs:
 			g.destroyGophers()
 		case Quack:
@@ -163,7 +147,7 @@ func (g *Game) Update() {
 				g.quack(n)
 			}
 		case BigMouse:
-			g.bigMouse = key.args[0] == "true"
+			g.bigMouse = !g.bigMouse
 		case SnakeCmd:
 			if key.args[0] == "start" && !g.gameRunning {
 				g.snakeGame.reset()
@@ -194,111 +178,15 @@ func (g *Game) Update() {
 			cache, _ := strconv.ParseBool(key.args[1])
 			go speak(key.args[0], cache)
 		case PlinkoCmd:
-			// !plinko start - this will start the game
-			// keep alive for 60 seconds with no drops
-			// each drop sets the keepalive back to 60?
-			// no other arguments used
-			if g.plinkoRunning {
-				// !plinko drop n username
-				// drop a token at drop position n for the given username
-				if key.args[0] == "drop" {
-					color := "#0000FF"
-					if len(key.args) < 3 {
-						return
-					}
-					if len(key.args) >= 4 {
-						color = key.args[3]
-					}
-					// make sure we get an integer for drop position
-					n, err := strconv.Atoi(key.args[1])
-					if err != nil {
-						// for testing:
-						if key.args[1] == "all" {
-							g.plinko.DropAll(key.args[2], color)
-						}
-						return
-					}
-					g.plinko.DropBall(n, key.args[2], color)
-				}
-			}
+			g.plinko.HandleMessage(key.args)
 		case TanksCmd:
-			if key.args[0] == "start" {
-				g.tanksRunning = true
-			} else if key.args[0] == "stop" {
-				g.tanksRunning = false
-				g.tanks.Reset()
-			} else if key.args[0] == "join" {
-				if len(key.args) < 3 {
-					return
-				}
-				g.tanks.AddPlayer(key.args[1], key.args[2])
-			} else if key.args[0] == "reset" {
-				g.tanks.Reset()
-			} else if key.args[0] == "shoot" {
-				a, err := strconv.ParseFloat(key.args[2], 64)
-				if err != nil {
-					return
-				}
-				v, err := strconv.ParseFloat(key.args[3], 64)
-				if err != nil {
-					return
-				}
-				g.tanks.Shoot(key.args[1], a, v)
-			} else if key.args[0] == "begin" {
-				g.tanks.Begin()
-			}
+			g.tanks.HandleMessage(key.args)
 		case BopCmd:
-			if key.args[0] == "start" && !g.bopometer.IsRunning() {
-				g.bopometer.Reset()
-				g.bopometer.SetRunning(true)
-			} else if key.args[0] == "add" && g.bopometer.IsRunning() {
-				if len(key.args) < 2 {
-					return
-				}
-				n, err := strconv.Atoi(key.args[1])
-				if err != nil {
-					return
-				}
-				g.bopometer.Add(n)
-			} else if key.args[0] == "stop" && g.bopometer.IsRunning() {
-				g.bopometer.Finish()
-				g.bopometer.SetRunning(false)
-			}
+			g.bopometer.HandleMessage(key.args)
 		case LightsOutCmd:
-			if key.args[0] == "start" && !g.lightsRunning {
-				g.lightsout.LoadPuzzle(0)
-				g.lightsRunning = true
-				break
-			}
-			if g.lightsRunning {
-				if key.args[0] == "reset" {
-					g.lightsout.Reset()
-					break
-				}
-				if key.args[0] == "stop" {
-					g.lightsRunning = false
-					break
-				}
-				n, err := strconv.Atoi(key.args[0])
-				if err != nil {
-					break
-				}
-				g.lightsout.Press(n)
-			}
+			g.lightsout.HandleMessage(key.args)
 		case BingoCmd:
-			if key.args[0] == "drawn" {
-				if len(key.args) < 2 {
-					break
-				}
-				g.bingoOverlay.AddNumber(key.args[1])
-			} else if key.args[0] == "reset" {
-				g.bingoOverlay.Reset()
-			} else if key.args[0] == "winner" {
-				if len(key.args) < 3 {
-					break
-				}
-				g.bingoOverlay.End(key.args[1], key.args[2])
-			}
+			g.bingoOverlay.HandleMessage(key.args)
 		case MiracleCmd:
 			g.showWhip = true
 			sound.Play("indigo")
@@ -327,15 +215,11 @@ func (g *Game) Update() {
 		g.snakeGame.Update(g.currentInput)
 		g.currentInput = 0
 	}
-	if g.plinkoRunning {
-		g.plinko.Update()
-	}
+	g.plinko.Update()
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
-	if g.bopometer.IsRunning() {
-		g.bopometer.Update(delta)
-	}
+	g.bopometer.Update(delta)
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
 			if err := g.marquees[i].Update(delta); err != nil {
@@ -345,9 +229,7 @@ func (g *Game) Update() {
 			}
 		}
 	}
-	if g.tanksRunning {
-		g.tanks.Update(delta)
-	}
+	g.tanks.Update(delta)
 	if g.errorManager.Visible {
 		g.errorManager.Update(delta)
 	}
@@ -370,14 +252,8 @@ func (g *Game) Draw() {
 	if g.bigMouse {
 		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
 	}
-
-	if g.tanksRunning {
-		g.tanks.Draw()
-	}
-
-	if g.lightsRunning {
-		g.lightsout.Draw()
-	}
+	g.tanks.Draw()
+	g.lightsout.Draw()
 
 	if g.gameRunning {
 		g.snakeGame.Draw()
@@ -388,12 +264,8 @@ func (g *Game) Draw() {
 	// if g.showStatic {
 	// 	g.staticLayer.Draw(screen)
 	// }
-	if g.plinkoRunning {
-		g.plinko.Draw()
-	}
-	if g.bopometer.IsRunning() || g.bopometer.IsFinished() {
-		g.bopometer.Draw()
-	}
+	g.plinko.Draw()
+	g.bopometer.Draw()
 
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
@@ -457,7 +329,7 @@ func main() {
 	}(game.commChannel, ga.connWriteChan)
 	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan)
 	defer game.plinko.CancelTimer()
-	game.plinkoRunning = true
+	//game.plinkoRunning = true
 	game.snakeGame = newSnake()
 	game.tanks = tanks.Load(screenWidth, screenHeight)
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
@@ -505,15 +377,6 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 				arg = fields[1]
 			}
 			c <- cmd{SpawnGopher, []string{arg}}
-		case "hidego":
-			c <- cmd{HideGopher, []string{}}
-		case "showgo":
-			c <- cmd{ShowGopher, []string{}}
-		case "sizego":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{SizeGopher, fields[1:]}
 		case "quack":
 			if len(fields) < 2 {
 				continue
@@ -522,10 +385,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 		case "killgophs":
 			c <- cmd{KillGophs, []string{}}
 		case "bigmouse":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BigMouse, fields[1:]}
+			c <- cmd{BigMouse, []string{}}
 		case "snake":
 			if len(fields) < 2 {
 				continue
@@ -631,36 +491,6 @@ func (g *Game) destroyGophers() {
 	}
 	g.sprites.num = 0
 	g.sprites.sprites = make([]*Sprite, maxSprites)
-}
-
-func (g *Game) hideGopher() {
-	if g.sprites.num == 0 {
-		return
-	}
-	if g.sprites.sprites[0].draw {
-		sound.Play("whit")
-	}
-	g.sprites.sprites[0].draw = false
-}
-
-func (g *Game) showGopher() {
-	if g.sprites.num == 0 {
-		return
-	}
-	if !g.sprites.sprites[0].draw {
-		sound.Play("eep")
-	}
-	g.sprites.sprites[0].draw = true
-}
-
-func (g *Game) setGopherSize(size float64) {
-	if g.sprites.num == 0 {
-		return
-	}
-	if size >= g.sprites.sprites[0].objScale*2 && g.sprites.sprites[0].draw {
-		sound.Play("boing")
-	}
-	g.sprites.sprites[0].SetScale(size)
 }
 
 func (g *Game) quack(n int) {
