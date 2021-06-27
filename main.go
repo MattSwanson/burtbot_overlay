@@ -100,6 +100,7 @@ const (
 	BingoCmd
 	LightsCmd
 	ErrorCmd
+	Quacksplosion
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -208,6 +209,8 @@ func (g *Game) Update() {
 				time.Sleep(time.Second * 5)
 				g.errorManager.Clear()
 			}()
+		case Quacksplosion:
+			g.quacksplosion()
 		}
 	default:
 	}
@@ -444,6 +447,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{LightsCmd, fields[1:]}
 		case "error":
 			c <- cmd{ErrorCmd, []string{}}
+		case "quacksplosion":
+			c <- cmd{Quacksplosion, []string{}}
 		}
 
 		fmt.Println(fields)
@@ -499,5 +504,21 @@ func (g *Game) quack(n int) {
 			sound.Play("quack")
 			time.Sleep(time.Millisecond * 200)
 		}
+	}()
+}
+
+func (g *Game) quacksplosion() {
+	go func() {
+		var sleepTime = time.Duration(5000000000)
+		for i := 1; i <= 30; i++ {
+			time.Sleep(sleepTime)
+			sound.Play("quack")
+			fmt.Println(sleepTime)
+			sleepTime = sleepTime / 2
+			if sleepTime < 100000000 {
+				sleepTime = 100000000
+			}
+		}
+		sound.Play("explosion")
 	}()
 }

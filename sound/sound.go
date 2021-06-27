@@ -23,6 +23,7 @@ func init() {
 	sounds["indigo"] = rl.LoadSound("sounds/Indigo.wav")
 	sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
 	sounds["kerplunk"] = rl.LoadSound("sounds/kerplunk.wav")
+	sounds["explosion"] = rl.LoadSound("sounds/explosion-02.wav")
 }
 
 func Play(name string) error {
