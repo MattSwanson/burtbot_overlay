@@ -224,6 +224,7 @@ func (g *Game) Update() {
 	}
 	g.bopometer.Update(delta)
 	if g.marqueesEnabled {
+		UpdateEmoteCache(delta)
 		for i := 0; i < len(g.marquees); i++ {
 			if err := g.marquees[i].Update(delta); err != nil {
 				copy(g.marquees[i:], g.marquees[i+1:])

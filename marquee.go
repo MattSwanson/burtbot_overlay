@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/gif"
 	"log"
 	"math/rand"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 )
 
 var marqueeFont rl.Font
-var emoteCache map[string]rl.Texture2D
+var emoteCache map[string]*imageInfo
 
 const (
 	textSize   = 96
@@ -36,10 +37,19 @@ type marqueeMsg struct {
 // 	img     *ebiten.Image
 // }
 
+type imageInfo struct {
+	img          rl.Texture2D
+	animated     bool
+	frameCount   int
+	delay        []int
+	currentFrame int
+	frameCounter int
+}
+
 type emoteIndex struct {
-	start int
-	end   int
-	img   rl.Texture2D
+	start   int
+	end     int
+	imgInfo *imageInfo
 }
 
 type emoteIndices []emoteIndex
@@ -67,7 +77,7 @@ type Marquee struct {
 type sequence []interface{}
 
 func init() {
-	emoteCache = make(map[string]rl.Texture2D)
+	emoteCache = make(map[string]*imageInfo)
 }
 
 func LoadMarqueeFonts() {
@@ -108,7 +118,7 @@ func (m *Marquee) setText(j string) {
 		emoteData := strings.Split(msg.Emotes, "/")
 		for _, e := range emoteData {
 			split := strings.Split(e, ":")
-			img, err := getImageFromCDN(split[0])
+			imgInfo, err := getImageFromCDN(split[0])
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -125,14 +135,13 @@ func (m *Marquee) setText(j string) {
 					log.Println(err.Error())
 				}
 				eIndices = append(eIndices, emoteIndex{
-					start: start - prefixLen,
-					end:   end - prefixLen,
-					img:   img,
+					start:   start - prefixLen,
+					end:     end - prefixLen,
+					imgInfo: imgInfo,
 				})
 			}
 		}
 		sort.Sort(eIndices)
-		fmt.Println(eIndices)
 		var offset int
 		strippedMsg := msg.RawMessage
 		offsetPoints := []float64{0}
@@ -147,8 +156,8 @@ func (m *Marquee) setText(j string) {
 			m.sequence = append(m.sequence, txt)
 			m.totalWidth += int(rl.MeasureTextEx(marqueeFont, txt, textSize, 0).X)
 			offsetPoints = append(offsetPoints, float64(m.totalWidth))
-			m.sequence = append(m.sequence, v.img)
-			m.totalWidth += int(v.img.Width)
+			m.sequence = append(m.sequence, v.imgInfo)
+			m.totalWidth += int(v.imgInfo.img.Width / int32(v.imgInfo.frameCount))
 			offsetPoints = append(offsetPoints, float64(m.totalWidth))
 		}
 		m.sequence = append(m.sequence, strippedMsg)
@@ -182,14 +191,44 @@ func (m *Marquee) Update(delta float64) error {
 	return nil
 }
 
+func UpdateEmoteCache(delta float64) {
+	for _, e := range emoteCache {
+		e.Update(delta)
+	}
+}
+
+func (i *imageInfo) Update(delta float64) {
+	if !i.animated {
+		return
+	}
+	i.frameCounter += int(delta)
+	if i.frameCounter >= i.delay[i.currentFrame]*10 {
+		i.currentFrame = (i.currentFrame + 1) % i.frameCount
+		i.frameCounter = 0
+	}
+
+}
+
 func (m *Marquee) Draw() {
 	if m.on {
 		for k, v := range m.sequence {
 			switch thing := v.(type) {
 			case string:
 				rl.DrawTextEx(marqueeFont, thing, rl.Vector2{X: float32(m.x + m.xOffsets[k]), Y: float32(m.y)}, textSize, 0, rl.Color(m.color))
-			case rl.Texture2D:
-				rl.DrawTexture(thing, int32(m.x+m.xOffsets[k]), int32(m.y), rl.White)
+			case *imageInfo:
+				drawX := int32(m.x + m.xOffsets[k])
+				drawY := int32(m.y)
+				if !thing.animated {
+					rl.DrawTexture(thing.img, drawX, drawY, rl.White)
+				} else {
+					r := rl.Rectangle{
+						X:      float32(thing.currentFrame) * float32(thing.img.Width) / float32(thing.frameCount),
+						Y:      0,
+						Width:  float32(thing.img.Width) / float32(thing.frameCount),
+						Height: float32(thing.img.Height),
+					}
+					rl.DrawTextureRec(thing.img, r, rl.Vector2{X: float32(drawX), Y: float32(drawY)}, rl.White)
+				}
 			}
 		}
 	}
@@ -199,23 +238,70 @@ func (m *Marquee) SetSpeed(speed float64) {
 	m.speed = speed
 }
 
-func getImageFromCDN(id string) (rl.Texture2D, error) {
+func getImageFromCDN(id string) (*imageInfo, error) {
 	// check cache first
 	if img, ok := emoteCache[id]; ok {
 		return img, nil
 	}
 
-	url := fmt.Sprintf("http://static-cdn.jtvnw.net/emoticons/v1/%s/3.0", id)
+	url := fmt.Sprintf("https://static-cdn.jtvnw.net/emoticons/v2/%s/default/dark/3.0", id)
 	resp, err := http.Get(url)
 	if err != nil {
-		return rl.Texture2D{}, err
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var img image.Image
+	var rimg *rl.Image
+	info := imageInfo{frameCount: 1}
+	imgType := resp.Header.Get("content-type")
+	switch imgType {
+	case "image/gif":
+		gif, err := gif.DecodeAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		pixels := make([]byte, gif.Config.Height*gif.Config.Width*len(gif.Image)*4)
+		for row := 0; row < gif.Config.Height; row++ {
+			for inum := 0; inum < len(gif.Image); inum++ {
+				for x := 0; x < gif.Config.Width; x++ {
+					pixelIndex := (row * len(gif.Image) * gif.Config.Width * 4) + (inum * gif.Config.Width * 4) + (x * 4)
+					pc := gif.Image[inum].At(x, row)
+					r, g, b, a := pc.RGBA()
+					pixels[pixelIndex] = byte(r)
+					pixels[pixelIndex+1] = byte(g)
+					pixels[pixelIndex+2] = byte(b)
+					pixels[pixelIndex+3] = byte(a)
+				}
+
+			}
+		}
+		rimg = rl.NewImage(pixels, int32(gif.Config.Width*len(gif.Image)), int32(gif.Config.Height), 1, rl.UncompressedR8g8b8a8)
+		info.animated = true
+		info.delay = gif.Delay
+		noDelay := true
+		for _, v := range gif.Delay {
+			if v != 0 {
+				noDelay = false
+				break
+			}
+		}
+		if noDelay {
+			for i := 0; i < len(info.delay); i++ {
+				info.delay[i] = 7
+			}
+		}
+		info.frameCount = len(gif.Image)
+	case "image/png":
+		img, _, err = image.Decode(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		rimg = rl.NewImageFromImage(img)
 	}
 
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		return rl.Texture2D{}, err
-	}
+	info.img = rl.LoadTextureFromImage(rimg)
 
-	emoteCache[id] = rl.LoadTextureFromImage(rl.NewImageFromImage(img))
+	emoteCache[id] = &info
 	return emoteCache[id], nil
 }
