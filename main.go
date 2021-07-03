@@ -474,10 +474,13 @@ func handleWrites(ctx context.Context, conn *net.Conn, wc chan string) {
 }
 
 func (g *Game) newGopher(n int) {
+	if n <= 0 {
+		return
+	}
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < n; i++ {
 		if g.sprites.num == maxSprites {
-			return
+			break
 		}
 		index := rand.Int() % len(sprites)
 		newGoph := NewSprite(sprites[index])
