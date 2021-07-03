@@ -315,8 +315,8 @@ func (c *Core) CheckForCollision(delta float64) {
 
 		if b.y > gameHeight+50 {
 			b.falling = false
-			fmt.Printf("you got %d times your token\n", c.rewardMultiplier)
-			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, c.rewardMultiplier)
+			reward := c.rewardMultiplier * b.Value
+			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, reward)
 			c.tokens = removeBall(c.tokens, idx)
 		}
 	}
@@ -373,7 +373,13 @@ func (c *Core) HandleMessage(args []string) {
 			}
 			return
 		}
-		c.DropBall(n, args[2], color)
+		value := 1
+		if len(args) >= 5 {
+			if v, err := strconv.Atoi(args[4]); err == nil && v != 0 {
+				value = v
+			}
+		}
+		c.DropBall(n, value, args[2], color)
 	}
 }
 
@@ -399,19 +405,19 @@ func (c *Core) Draw() {
 	}
 }
 
-func (c *Core) DropBall(pos int, playerName, playerColor string) {
+func (c *Core) DropBall(pos, value int, playerName, playerColor string) {
 	// make a new token with its pos set to the selected drop point
 	if pos < 0 || pos >= len(c.queues) {
 		return // do nothing for now, but should return an error
 		// or is this validated on the other end? no
 	}
-	t := NewToken(playerName, playerColor, tokenImg, c.queues[pos].dropPosition)
+	t := NewToken(playerName, playerColor, tokenImg, c.queues[pos].dropPosition, value)
 	c.queues[pos].push(t)
 }
 
 func (c *Core) DropAll(playerName, playerColor string) {
 	for i := 0; i < len(c.queues); i++ {
-		c.DropBall(i, playerName, playerColor)
+		c.DropBall(i, 1, playerName, playerColor)
 	}
 }
 
