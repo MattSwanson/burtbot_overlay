@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/games/cube"
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
@@ -31,6 +32,7 @@ var ga Game
 var mpos rl.Vector2
 var mwhipImg rl.Texture2D
 var acceptedHosts []string
+var dedCount int
 
 const (
 	listenAddr = ":8081"
@@ -101,6 +103,9 @@ const (
 	LightsCmd
 	ErrorCmd
 	Quacksplosion
+	FollowAlert
+	DedCmd
+	CubeCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -125,17 +130,16 @@ func (g *Game) Update() {
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(rl.KeyUp):
-			g.currentInput = rl.KeyUp
+			g.currentInput = key.command
 		case int(rl.KeyDown):
-			g.currentInput = rl.KeyDown
+			g.currentInput = key.command
 		case int(rl.KeyLeft):
-			g.currentInput = rl.KeyLeft
+			g.currentInput = key.command
 		case int(rl.KeyRight):
-			g.currentInput = rl.KeyRight
-
+			g.currentInput = key.command
 		case SpawnGopher:
 			if num, err := strconv.Atoi(key.args[0]); err != nil {
-				return
+				break
 			} else {
 				g.newGopher(num)
 			}
@@ -143,7 +147,7 @@ func (g *Game) Update() {
 			g.destroyGophers()
 		case Quack:
 			if n, err := strconv.Atoi(key.args[0]); err != nil {
-				return
+				break
 			} else {
 				g.quack(n)
 			}
@@ -164,7 +168,7 @@ func (g *Game) Update() {
 			if key.args[0] == "off" {
 				g.marqueesEnabled = false
 				g.marquees = []*Marquee{}
-				return
+				break
 			}
 			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
 			m.setText(key.args[0])
@@ -211,6 +215,19 @@ func (g *Game) Update() {
 			}()
 		case Quacksplosion:
 			g.quacksplosion()
+		case FollowAlert:
+			if len(key.args) == 0 {
+				break
+			}
+			visuals.ShowFollowAlert(key.args[0])
+		case DedCmd:
+			n, err := strconv.Atoi(key.args[0])
+			if err != nil {
+				break
+			}
+			dedCount = n
+		case CubeCmd:
+			cube.HandleCommand(key.args)
 		}
 	default:
 	}
@@ -256,6 +273,9 @@ func (g *Game) Draw() {
 	if g.bigMouse {
 		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
 	}
+	if dedCount > 0 {
+		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
+	}
 	g.tanks.Draw()
 	g.lightsout.Draw()
 
@@ -270,6 +290,8 @@ func (g *Game) Draw() {
 	// }
 	g.plinko.Draw()
 	g.bopometer.Draw()
+	cube.Draw()
+	visuals.DrawFollowAlert()
 
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
@@ -287,7 +309,7 @@ func (g *Game) Draw() {
 }
 
 func main() {
-	rl.SetConfigFlags(rl.FlagWindowFloating | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
+	rl.SetConfigFlags(rl.FlagFullscreenMode | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
@@ -295,6 +317,7 @@ func main() {
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	LoadSprites()
+	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
@@ -450,6 +473,12 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{ErrorCmd, []string{}}
 		case "quacksplosion":
 			c <- cmd{Quacksplosion, []string{}}
+		case "newfollow":
+			c <- cmd{FollowAlert, fields[1:]}
+		case "ded":
+			c <- cmd{DedCmd, fields[1:]}
+		case "cube":
+			c <- cmd{CubeCmd, fields[1:]}
 		}
 
 		fmt.Println(fields)
