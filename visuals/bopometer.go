@@ -38,6 +38,8 @@ func LoadBopometerAssets() {
 	largeBop = rl.LoadTexture("./images/bopL.png")
 	bg = rl.LoadTexture("./images/bopometer_bg.png")
 	bopFont = rl.LoadFont("caskaydia.TTF")
+	rl.GenTextureMipmaps(&bopFont.Texture)
+	rl.SetTextureFilter(bopFont.Texture, rl.FilterAnisotropic16x)
 }
 
 func NewBopometer(wc chan string) *Bopometer {
