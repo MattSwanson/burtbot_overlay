@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -90,17 +91,19 @@ func speak(txt string, shouldCache bool) error {
 		}(sound)
 	}
 	rl.PlaySoundMulti(sound)
+	pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	return nil
 }
 
 func getTTS(txt string) ([]byte, error) {
-	ctx := context.Background()
-
+	ctx, canc := context.WithTimeout(context.Background(), time.Second*10)
+	defer canc()
 	client, err := texttospeech.NewClient(ctx)
 	if err != nil {
 		log.Printf("Unable to start tts client: %s\n", err)
 		return nil, err
 	}
+	defer client.Close()
 
 	speed := rand.Float64() + 0.5
 
