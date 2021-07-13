@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	cloud.google.com/go v0.79.0
-	github.com/MattSwanson/raylib-go v0.0.3
+	github.com/MattSwanson/raylib-go v0.0.8
 	github.com/golang/protobuf v1.5.1 // indirect
 	github.com/ojrac/opensimplex-go v1.0.2
 	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4
