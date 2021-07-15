@@ -227,7 +227,7 @@ func (g *Game) Update() {
 			}
 			dedCount = n
 		case CubeCmd:
-			cube.HandleCommand(key.args)
+			go cube.HandleCommand(key.args)
 		}
 	default:
 	}

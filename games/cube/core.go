@@ -4,19 +4,25 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
-	cubeSize = 3 // X x X
-	drawSize = 180
+	cubeSize            = 3 // X x X
+	drawSize            = 80
+	lineSize    float32 = 3.0
+	drawOffsetX         = 2000
+	drawOffsetY         = 1100
 )
 
 var running bool
 var c *cube
 var randoCancelFunc context.CancelFunc
+var cubeLock sync.Mutex = sync.Mutex{}
+var hasShuffled bool
 
 func init() {
 	resetCube()
@@ -32,17 +38,17 @@ type cube struct {
 }
 
 //
-//		 [][][]
-//		 [][][]
-//		 [][][]
+//[2][5][8] [0][1][2]
+//[1][4][7] [3][4][5]
+//[0][3][6] [6][7][8]
 //
-//[][][] [0][1][2] [][][] [][][]
-//[][][] [3][4][5] [][][] [][][]
-//[][][] [6][7][8] [][][] [][][]
+//[0][1][2] [0][1][2] [0][1][2] [0][1][2]
+//[3][4][5] [3][4][5] [3][4][5] [3][4][5]
+//[6][7][8] [6][7][8] [6][7][8] [6][7][8]
 //
-//       [][][]
-//		 [][][]
-//       [][][]
+//[6][3][0] [0][1][2]
+//[7][4][1] [3][4][5]
+//[8][5][2] [6][7][8]
 
 func HandleCommand(args []string) {
 	switch args[0] {
@@ -58,6 +64,7 @@ func HandleCommand(args []string) {
 		if !running || len(args) < 2 {
 			return
 		}
+		cubeLock.Lock()
 		switch args[1] {
 		case "R":
 			rotateRightCW()
@@ -188,8 +195,11 @@ func HandleCommand(args []string) {
 		case "S'":
 			rotateSCW()
 		}
-		//rotateRightCW()
-
+		// check for completion
+		if checkCube() {
+			fmt.Println("oh joy")
+		}
+		cubeLock.Unlock()
 	}
 }
 
@@ -202,6 +212,18 @@ func resetCube() {
 		left:   []byte{'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'},
 		right:  []byte{'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R'},
 	}
+}
+
+func checkCube() bool {
+	complete := true
+	for i := 0; i < len(c.front); i++ {
+		if c.front[i] != c.front[4] || c.back[i] != c.front[4] || c.top[i] != c.top[4] ||
+			c.bottom[i] != c.bottom[4] || c.left[i] != c.left[4] || c.right[i] != c.right[4] {
+			return false
+		}
+	}
+	hasShuffled = false
+	return complete
 }
 
 func rotateFaceCW(face []byte) {
@@ -331,17 +353,17 @@ func Draw() {
 
 		// we know the bottom 3 need to butt up agains the top of the front face
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: float32(cubeSize*drawSize+drawSize*int32(k%cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},          // TL
-			{X: float32(cubeSize*drawSize+drawSize*int32(k%cubeSize)) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                               // BL
-			{X: float32(cubeSize*drawSize+drawSize*int32(k%cubeSize)+drawSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)}, // TR
-			{X: float32(cubeSize*drawSize+drawSize*int32(k%cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                      // BR
+			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},          // TL
+			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                               // BL
+			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)}, // TR
+			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                      // BR
 		}, getColor(v))
 	}
 	// for k, v := range c.bottom {
 	// 	rl.DrawRectangle(cubeSize*drawSize+drawSize*int32(k%cubeSize), 2*cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
 	// }
 	for k, v := range c.front {
-		rl.DrawRectangle(cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
+		rl.DrawRectangle(drawOffsetX+drawSize*int32(k%cubeSize), drawOffsetY+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
 	}
 	// for k, v := range c.back {
 	// 	rl.DrawRectangle(3*cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
@@ -351,14 +373,47 @@ func Draw() {
 	// }
 	for k, v := range c.right {
 		//rl.DrawRectangle(2*cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
-
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: float32(2*cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - float32(int32(k%cubeSize)*drawSize/2.0)},                               // TL
-			{X: float32(2*cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)+drawSize) - float32(int32(k%cubeSize)*drawSize/2.0)},                      // BL
-			{X: float32(2*cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // TR
-			{X: float32(2*cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) + drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // BR
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - float32(int32(k%cubeSize)*drawSize/2.0)},                               // TL
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)+drawSize) - float32(int32(k%cubeSize)*drawSize/2.0)},                      // BL
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // TR
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) + drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // BR
 		}, getColor(v))
 	}
+
+	// Front horiz
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX, Y: drawOffsetY + drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY + drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX, Y: drawOffsetY + 2*drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY + 2*drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX, Y: drawOffsetY + 3*drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY + 3*drawSize}, lineSize, rl.Black)
+
+	// Front Vert
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX, Y: drawOffsetY + 3*drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY + 3*drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 2*drawSize, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + 2*drawSize, Y: drawOffsetY + 3*drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 3*drawSize, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + 3*drawSize, Y: drawOffsetY + 3*drawSize}, lineSize, rl.Black)
+
+	// Side horiz
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY + drawSize}, rl.Vector2{X: drawOffsetX + 9*drawSize/2, Y: drawOffsetY - drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY + 2*drawSize}, rl.Vector2{X: drawOffsetX + 9*drawSize/2, Y: drawOffsetY + drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + cubeSize*drawSize, Y: drawOffsetY + 3*drawSize}, rl.Vector2{X: drawOffsetX + 9*drawSize/2, Y: drawOffsetY + 3*drawSize/2}, lineSize, rl.Black)
+
+	// Side Vert
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 7*drawSize/2, Y: drawOffsetY - drawSize/2}, rl.Vector2{X: drawOffsetX + 7*drawSize/2, Y: drawOffsetY + 5*drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 4*drawSize, Y: drawOffsetY - drawSize}, rl.Vector2{X: drawOffsetX + 4*drawSize, Y: drawOffsetY + 2*drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 9*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, rl.Vector2{X: drawOffsetX + 9*drawSize/2, Y: drawOffsetY + 3*drawSize/2}, lineSize, rl.Black)
+
+	// Top Vert
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + 3*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + 5*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 2*drawSize, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + 7*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 3*drawSize, Y: drawOffsetY}, rl.Vector2{X: drawOffsetX + 9*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, lineSize, rl.Black)
+
+	// Top Horiz
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + 3*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + 3*drawSize/2, Y: drawOffsetY - 3*drawSize/2}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY - drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize, Y: drawOffsetY - drawSize}, lineSize, rl.Black)
+	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize/2, Y: drawOffsetY - drawSize/2}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize/2, Y: drawOffsetY - drawSize/2}, lineSize, rl.Black)
+
 }
 
 func getColor(b byte) rl.Color {
@@ -381,6 +436,7 @@ func getColor(b byte) rl.Color {
 }
 
 func shuffle() {
+
 	if randoCancelFunc != nil {
 		fmt.Println("canceling")
 		randoCancelFunc()
@@ -389,6 +445,7 @@ func shuffle() {
 	}
 	var c context.Context
 	c, randoCancelFunc = context.WithCancel(context.Background())
+	cubeLock.Lock()
 	go func(ctx context.Context) {
 		for {
 			select {
@@ -426,5 +483,7 @@ func shuffle() {
 		time.Sleep(5 * time.Second)
 		randoCancelFunc()
 		randoCancelFunc = nil
+		hasShuffled = true
+		cubeLock.Unlock()
 	}()
 }
