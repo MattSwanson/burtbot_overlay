@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -91,7 +90,6 @@ func speak(txt string, shouldCache bool) error {
 		}(sound)
 	}
 	rl.PlaySoundMulti(sound)
-	pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	return nil
 }
 
