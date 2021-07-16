@@ -315,7 +315,7 @@ func (c *Core) CheckForCollision(delta float64) {
 
 		if b.y > gameHeight+50 {
 			b.falling = false
-			reward := c.rewardMultiplier * b.Value
+			reward := uint64(c.rewardMultiplier) * b.Value
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, reward)
 			c.tokens = removeBall(c.tokens, idx)
 		}
@@ -373,9 +373,9 @@ func (c *Core) HandleMessage(args []string) {
 			}
 			return
 		}
-		value := 1
+		var value uint64 = 1
 		if len(args) >= 5 {
-			if v, err := strconv.Atoi(args[4]); err == nil && v != 0 {
+			if v, err := strconv.ParseUint(args[4], 10, 64); err == nil && v != 0 {
 				value = v
 			}
 		}
@@ -405,7 +405,7 @@ func (c *Core) Draw() {
 	}
 }
 
-func (c *Core) DropBall(pos, value int, playerName, playerColor string) {
+func (c *Core) DropBall(pos int, value uint64, playerName, playerColor string) {
 	// make a new token with its pos set to the selected drop point
 	if pos < 0 || pos >= len(c.queues) {
 		return // do nothing for now, but should return an error

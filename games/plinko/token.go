@@ -24,10 +24,10 @@ type token struct {
 	playerName  string
 	playerColor rl.Color
 	labelOffset fPoint
-	Value       int
+	Value       uint64
 }
 
-func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value int) *token {
+func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value uint64) *token {
 	radius := float64(img.Width) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	color, err := colorHexStrToColor(playerColor)
