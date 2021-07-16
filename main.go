@@ -314,6 +314,7 @@ func main() {
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
+	sound.LoadSounds()
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	LoadSprites()

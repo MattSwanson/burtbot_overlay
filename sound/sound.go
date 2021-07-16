@@ -6,12 +6,11 @@ import (
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
-var sounds map[string]rl.Sound
-
 const MasterVolume float32 = 0.75
 
-func init() {
-	sounds = map[string]rl.Sound{}
+var sounds map[string]rl.Sound = map[string]rl.Sound{}
+
+func LoadSounds() {
 	sounds["eep"] = rl.LoadSound("sounds/wildeep.wav")
 	sounds["whit"] = rl.LoadSound("sounds/Whit.wav")
 	sounds["boing"] = rl.LoadSound("sounds/Boing.wav")
