@@ -34,6 +34,10 @@ var mwhipImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
+var camera rl.Camera3D
+var tuxpos rl.Vector3 = rl.Vector3{X: 0, Y: 0, Z: -500}
+var showtux bool
+
 const (
 	listenAddr = ":8081"
 )
@@ -106,6 +110,7 @@ const (
 	FollowAlert
 	DedCmd
 	CubeCmd
+	TuxCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -126,6 +131,12 @@ var connMessages = []string{
 
 func (g *Game) Update() {
 	delta := float64(time.Since(g.lastUpdate).Milliseconds())
+	if showtux {
+		tuxpos.Z += float32(50.0 * delta / 1000)
+		if tuxpos.Z > 25 {
+			showtux = false
+		}
+	}
 	select {
 	case key := <-g.commChannel:
 		switch key.command {
@@ -228,6 +239,9 @@ func (g *Game) Update() {
 			dedCount = n
 		case CubeCmd:
 			go cube.HandleCommand(key.args)
+		case TuxCmd:
+			tuxpos.Z = -1000
+			showtux = true
 		}
 	default:
 	}
@@ -266,6 +280,13 @@ func (g *Game) Update() {
 func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
+
+	rl.BeginMode3D(camera)
+	//rl.DrawCubeTexture(sprites[0], rl.Vector3{0, 0, 0}, 2.5, 2.5, 2.5, rl.White)
+	rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
+	//rl.DrawGrid(10, 1.0)
+	rl.EndMode3D()
+
 	rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
@@ -309,12 +330,20 @@ func (g *Game) Draw() {
 }
 
 func main() {
-	rl.SetConfigFlags(rl.FlagFullscreenMode | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
+	rl.SetConfigFlags(rl.FlagFullscreenMode | rl.FlagWindowTopmost | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
+
+	camera = rl.NewCamera3D(
+		rl.Vector3{X: 0.0, Y: 0.0, Z: 10.0},
+		rl.Vector3{X: 0.0, Y: 0.0, Z: 0.0},
+		rl.Vector3{X: 0.0, Y: 1.0, Z: 0.0},
+		45.0,
+		rl.CameraPerspective,
+	)
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	LoadSprites()
@@ -480,6 +509,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{DedCmd, fields[1:]}
 		case "cube":
 			c <- cmd{CubeCmd, fields[1:]}
+		case "tux":
+			c <- cmd{TuxCmd, []string{}}
 		}
 
 		fmt.Println(fields)
