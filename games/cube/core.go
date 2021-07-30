@@ -14,7 +14,7 @@ const (
 	cubeSize            = 3 // X x X
 	drawSize            = 80
 	lineSize    float32 = 3.0
-	drawOffsetX         = 2000
+	drawOffsetX         = 150
 	drawOffsetY         = 1100
 )
 
@@ -231,6 +231,10 @@ func rotateFaceCW(face []byte) {
 	face[1], face[5], face[7], face[3] = face[3], face[1], face[5], face[7]
 }
 
+func win() {
+
+}
+
 func rotateFrontCW() {
 	rotateFaceCW(c.front)
 	c.top[6], c.top[7], c.top[8], c.right[0], c.right[3], c.right[6], c.bottom[0], c.bottom[1], c.bottom[2],
@@ -332,7 +336,6 @@ func start() {
 		return
 	}
 	running = true
-	fmt.Println("starting the cube... how exciting")
 }
 
 func stop() {
@@ -340,7 +343,6 @@ func stop() {
 		return
 	}
 	running = false
-	fmt.Println("stopping the cube... how sad")
 }
 
 func Draw() {
