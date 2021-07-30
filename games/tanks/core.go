@@ -13,9 +13,9 @@ import (
 
 const (
 	maxShotVelocity = 1500 // ?
+	slopeCalcOffset = 20
 )
 
-var xspawns = []int{}
 var boomImg rl.Texture2D
 
 type Core struct {
@@ -62,14 +62,13 @@ func Load(sWidth, sHeight int) *Core {
 	}
 }
 
-func (c *Core) PlaceTank(num int) {
-	y := c.heightMap[xspawns[num]]
-	xpos := float64(xspawns[num])
-	ymo := c.heightMap[xspawns[num]-20]
-	ypo := c.heightMap[xspawns[num]+20]
-	s := (ymo - ypo) / 40
+func (c *Core) PlaceTank(num int, xpos int) {
+	y := c.heightMap[xpos]
+	ymo := c.heightMap[xpos-slopeCalcOffset]
+	ypo := c.heightMap[xpos+slopeCalcOffset]
+	s := (ymo - ypo) / (2 * slopeCalcOffset)
 	c.tanks[num].setAngle(-math.Atan(s))
-	c.tanks[num].setPosition(xpos, y)
+	c.tanks[num].setPosition(float64(xpos), y)
 }
 
 func (c *Core) advanceTurn(i int) {
@@ -108,6 +107,7 @@ func (c *Core) Draw() {
 	if c.wind < 0 {
 		windIndX += c.wind
 	}
+	rl.DrawText(fmt.Sprintf("Wind: %0.2f", c.wind), int32(c.screenWidth/2), 100, 32, rl.Green)
 	rl.DrawRectangle(int32(windIndX), 0, int32(math.Abs(c.wind)), 50, rl.Blue)
 	rl.DrawLine(int32(c.screenWidth/2), 0, int32(c.screenWidth/2), 75, rl.Green)
 	if c.gameOver {
@@ -152,19 +152,10 @@ func (c *Core) Update(delta float64) error {
 	if c.projectile == nil {
 		return nil
 	}
-	// tank collision
-	targets := []int{c.currentTurn}
-	for k, tank := range c.tanks {
-		if c.projectile.vx > 0 && c.projectile.x-tank.cx <= 0 ||
-			c.projectile.vx <= 0 && c.projectile.x-tank.cx >= 0 {
-			targets = append(targets, k)
-		}
-	}
-	for _, v := range targets {
-		tank := c.tanks[v]
+
+	for v, tank := range c.tanks {
 		maxDist := math.Sqrt(tank.w*tank.w+tank.h*tank.h) + 8
 		dst := math.Sqrt((tank.cx-c.projectile.x)*(tank.cx-c.projectile.x) + (tank.cy-c.projectile.y)*(tank.cy-c.projectile.y))
-		// if we aren't close enough for a collision to happen don't even bother checking anymore
 		if dst > maxDist {
 			continue
 		}
@@ -268,36 +259,65 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 }
 
 func (c *Core) AddPlayer(playerName string, imgURL string) {
+	xpos := 0
+	ind := 0
+	t := NewTank(playerName, imgURL)
 	if c.gameStarted {
+		l := slopeCalcOffset - 1
+		maxDist := int(c.tanks[0].x)
+		r := maxDist
+		for i := 0; i < c.playersJoined-1; i++ {
+			d := int(c.tanks[i+1].x - c.tanks[i].x)
+			if d > maxDist {
+				maxDist = d
+				l = int(c.tanks[i].x)
+				r = int(c.tanks[i+1].x)
+				ind = i + 1
+			}
+		}
+		if c.screenWidth-slopeCalcOffset-int(c.tanks[c.playersJoined-1].x) > maxDist {
+			ind = c.playersJoined
+			l = int(c.tanks[c.playersJoined-1].x)
+			r = c.screenWidth - slopeCalcOffset
+		}
+		xpos = rand.Intn(r-l) + l
+		if ind == c.playersJoined {
+			c.tanks = append(c.tanks, t)
+		} else if ind == 0 {
+			c.tanks = append([]*tank{t}, c.tanks...)
+			c.currentTurn = 1
+		} else {
+			front := make([]*tank, len(c.tanks[:ind])+1)
+			back := make([]*tank, len(c.tanks[ind:]))
+			for i := 0; i < ind; i++ {
+				front[i] = c.tanks[i]
+			}
+			front[ind] = t
+			for i := ind; i < len(c.tanks); i++ {
+				back[i-ind] = c.tanks[i]
+			}
+			c.tanks = append(front, back...)
+		}
+	}
+	c.playersJoined++
+	if !c.gameStarted {
+		t.setPosition(0+t.w/2, t.h*float64(c.playersJoined-1)+t.h)
+		c.tanks = append(c.tanks, t)
 		return
 	}
-	t := NewTank(playerName, imgURL)
-	t.setPosition(0+t.w/2, t.h*float64(c.playersJoined)+t.h)
-	c.tanks = append(c.tanks, t)
-	c.playersJoined++
+	c.PlaceTank(ind, xpos)
 }
 
 func (c *Core) Begin() {
 	if c.playersJoined < 2 {
 		return
 	}
-
-	// generate starting x positions based on number of
-	// players
-	xspawns = []int{300}
-	if c.playersJoined > 2 {
-		gap := 1960 / (c.playersJoined - 1)
-		for i := 1; i < c.playersJoined-1; i++ {
-			x := 300 + gap*i
-			xspawns = append(xspawns, x)
-		}
-	}
-	xspawns = append(xspawns, 2260)
-	c.gameStarted = true
-
+	r := (c.screenWidth - 2*slopeCalcOffset) / (c.playersJoined * 2)
 	for i := 0; i < c.playersJoined; i++ {
-		c.PlaceTank(i)
+		xpos := rand.Intn(r) + r*(i*2) + slopeCalcOffset
+		c.PlaceTank(i, xpos)
 	}
+	c.gameStarted = true
 }
 
 func removeTank(tanks []*tank, i int) []*tank {

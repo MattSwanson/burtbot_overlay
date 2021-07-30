@@ -47,7 +47,6 @@ func (p *projectile) Update(delta float64) {
 }
 
 func (p *projectile) Draw() {
-	//for i := len(p.prevXs) - 1; i >= 0; i-- {
 	for i := 0; i < len(p.prevXs); i++ {
 		a := uint8((1.0 - (1.0/6)*float32(len(p.prevXs)-i)) * 255)
 		rl.DrawCircle(int32(p.prevXs[i]), int32(p.prevYs[i]), float32(p.radius-float64(len(p.prevXs)-i)), rl.Color{R: 0xff, G: 0x00, B: 0x00, A: a})
