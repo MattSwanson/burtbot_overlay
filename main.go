@@ -1,7 +1,7 @@
 package main
 
 // gophers from https://github.com/ashleymcnamara/gophers
-// using fork of github.com/hajimehoshi/ebiten/v2
+// using fork of github.com/gen2brain/raylib-go/raylib
 
 import (
 	"bufio"
@@ -20,6 +20,7 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
+	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
 	"golang.org/x/net/context"
@@ -34,7 +35,6 @@ var mwhipImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
-var camera rl.Camera3D
 var tuxpos rl.Vector3 = rl.Vector3{X: 0, Y: 0, Z: -500}
 var showtux bool
 
@@ -281,12 +281,6 @@ func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
 
-	rl.BeginMode3D(camera)
-	//rl.DrawCubeTexture(sprites[0], rl.Vector3{0, 0, 0}, 2.5, 2.5, 2.5, rl.White)
-	rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
-	//rl.DrawGrid(10, 1.0)
-	rl.EndMode3D()
-
 	rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
@@ -337,16 +331,9 @@ func main() {
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
 
-	camera = rl.NewCamera3D(
-		rl.Vector3{X: 0.0, Y: 0.0, Z: 10.0},
-		rl.Vector3{X: 0.0, Y: 0.0, Z: 0.0},
-		rl.Vector3{X: 0.0, Y: 1.0, Z: 0.0},
-		45.0,
-		rl.CameraPerspective,
-	)
-
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	LoadSprites()
+	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	ga.commChannel = make(chan cmd)
