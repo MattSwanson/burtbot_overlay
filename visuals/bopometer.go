@@ -18,6 +18,7 @@ const (
 )
 
 var bopFont rl.Font
+var largeBopFont rl.Font
 var mediumBop rl.Texture2D
 var largeBop rl.Texture2D
 var bg rl.Texture2D
@@ -37,13 +38,15 @@ func LoadBopometerAssets() {
 	mediumBop = rl.LoadTexture("./images/bopM.png")
 	largeBop = rl.LoadTexture("./images/bopL.png")
 	bg = rl.LoadTexture("./images/bopometer_bg.png")
-	bopFont = rl.LoadFont("caskaydia.TTF")
+	//bopFont = rl.LoadFont("caskaydia.TTF")
+	bopFont = rl.LoadFontEx("caskaydia.TTF", textSize, nil, 0)
+	largeBopFont = rl.LoadFontEx("caskaydia.TTF", largeTextSize, nil, 0)
 	rl.GenTextureMipmaps(&bopFont.Texture)
 	rl.SetTextureFilter(bopFont.Texture, rl.FilterAnisotropic16x)
 }
 
 func NewBopometer(wc chan string) *Bopometer {
-	finalLabelX = int(rl.MeasureTextEx(bopFont, finalLabel, 96, 0).X / 2)
+	finalLabelX = int(rl.MeasureTextEx(bopFont, finalLabel, textSize, 0).X / 2)
 	return &Bopometer{bops: []*bop{}, writeChannel: wc}
 }
 
@@ -64,8 +67,8 @@ func (b *Bopometer) Draw() {
 		}
 	}
 	if b.finished {
-		rl.DrawTextEx(bopFont, finalLabel, rl.Vector2{X: float32(finalLabelX), Y: 400}, largeTextSize, 0, rl.Red)
-		rl.DrawTextEx(bopFont, fmt.Sprintf("%.2f", b.currentRating), rl.Vector2{X: 800, Y: 720}, largeTextSize, 0, rl.Red)
+		rl.DrawTextEx(largeBopFont, finalLabel, rl.Vector2{X: float32(finalLabelX), Y: 400}, largeTextSize, 0, rl.Red)
+		rl.DrawTextEx(largeBopFont, fmt.Sprintf("%.2f", b.currentRating), rl.Vector2{X: 800, Y: 720}, largeTextSize, 0, rl.Red)
 	}
 }
 

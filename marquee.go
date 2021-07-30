@@ -21,7 +21,7 @@ var marqueeFont rl.Font
 var emoteCache map[string]*imageInfo
 
 const (
-	textSize   = 96
+	textSize   = 120
 	xlTextSize = 512
 	xlYOffset  = screenHeight / 2
 	regYOffset = -5
@@ -31,11 +31,6 @@ type marqueeMsg struct {
 	RawMessage string `json:"rawMessage"`
 	Emotes     string `json:"emotes"`
 }
-
-// type emoteInfo struct {
-// 	indices []emoteIndex
-// 	img     *ebiten.Image
-// }
 
 type imageInfo struct {
 	img          rl.Texture2D
@@ -65,7 +60,6 @@ type Marquee struct {
 	y          float64
 	text       string
 	totalWidth int
-	textBounds image.Rectangle
 	color      color.RGBA
 	oneShot    bool
 	//emotes      map[string]emoteInfo
@@ -81,7 +75,7 @@ func init() {
 }
 
 func LoadMarqueeFonts() {
-	marqueeFont = rl.LoadFont("caskaydia.TTF")
+	marqueeFont = rl.LoadFontEx("caskaydia.TTF", textSize, nil, 0)
 }
 
 func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {

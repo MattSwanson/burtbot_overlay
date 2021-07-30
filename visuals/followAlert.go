@@ -11,6 +11,7 @@ import (
 const (
 	userNameTextXCenter = 1675
 	alertLength         = 6 // seconds
+	followTextSize      = 96
 )
 
 var (
@@ -19,20 +20,22 @@ var (
 	speechBubble   rl.Texture2D
 	userNamePosX   int32 = 900
 	userNameString string
+	followFont     rl.Font
 )
 
 func LoadFollowAlertAssets() {
 	largeGopher = rl.LoadTexture("./images/tux_goph.png")
 	speechBubble = rl.LoadTexture("./images/speech_bubble.png")
+	followFont = rl.LoadFontEx("caskaydia.ttf", followTextSize, nil, 0)
 }
 
 func ShowFollowAlert(username string) {
 	fmt.Println("new follower: ", username)
 	sound.Play("eep")
 	userNameString = fmt.Sprintf("%s!", username)
-	textWidth := rl.MeasureText(userNameString, 96)
+	textWidth := rl.MeasureTextEx(followFont, userNameString, followTextSize, 0).X
 	fmt.Println(textWidth)
-	userNamePosX = userNameTextXCenter - textWidth/2
+	userNamePosX = userNameTextXCenter - int32(textWidth/float32(2))
 	fmt.Println(userNamePosX)
 	alertVisible = true
 	go func() {
@@ -50,6 +53,6 @@ func DrawFollowAlert() {
 	rl.DrawTexture(largeGopher, -200, 0, rl.White)
 	rl.DrawTexture(speechBubble, 675, 200, rl.White)
 	// draw text with message and user name
-	rl.DrawText("Thanks for following,", 1000, 450, 96, rl.DarkBlue)
-	rl.DrawText(userNameString, userNamePosX, 550, 96, rl.Orange)
+	rl.DrawTextEx(followFont, "Thanks for following,", rl.Vector2{X: 1000, Y: 450}, followTextSize, 0, rl.DarkBlue)
+	rl.DrawTextEx(followFont, userNameString, rl.Vector2{X: float32(userNamePosX), Y: 550.0}, followTextSize, 0, rl.Orange)
 }
