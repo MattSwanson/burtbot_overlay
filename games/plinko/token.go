@@ -3,8 +3,10 @@ package plinko
 import (
 	"fmt"
 	"log"
+	"math/big"
 	"math/rand"
 
+	"github.com/MattSwanson/burtbot_overlay/shaders"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -24,10 +26,10 @@ type token struct {
 	playerName  string
 	playerColor rl.Color
 	labelOffset fPoint
-	Value       uint64
+	Value       *big.Int
 }
 
-func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value uint64) *token {
+func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value *big.Int) *token {
 	radius := float64(img.Width) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	color, err := colorHexStrToColor(playerColor)
@@ -35,6 +37,9 @@ func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, valu
 		log.Println("could not convert hex string to color", err.Error())
 		color = rl.Blue
 	}
+	// if value > 100 {
+	// 	color = rl.White
+	// }
 	return &token{
 		mass:        tokenMass,
 		x:           pos.x,
@@ -70,8 +75,18 @@ func (b *token) Draw() {
 	if !b.falling {
 		return
 	}
+	if b.Value.Cmp(big.NewInt(100)) == 1 {
+		shaders.SetOffsets(b.img.Width, b.img.Height)
+		rl.BeginShaderMode(shaders.Get("cosmic"))
+		//loc := rl.GetShaderLocation(superShader, "u_time")
+		//rl.SetShaderValue(superShader, loc, []float32{float32(time.Now().UnixNano())}, rl.ShaderUniformFloat)
+	}
 	rl.DrawTexture(b.img, int32(b.x), int32(b.y), b.playerColor)
+	if b.Value.Cmp(big.NewInt(100)) == 1 {
+		rl.EndShaderMode()
+	}
 	rl.DrawText(b.playerName, int32(b.x+b.labelOffset.x), int32(b.y+b.labelOffset.y), 18, rl.Green)
+
 }
 
 func (b *token) Release() {

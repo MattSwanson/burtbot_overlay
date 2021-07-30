@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"log"
 	"math"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -128,11 +130,10 @@ func (tq *tokenQueue) pop() (*token, error) {
 func Load(screenWidth, screenHeight float64, wc chan string) *Core {
 	timerChannel = make(chan bool)
 
-	tokenImg = rl.LoadTexture("./images/plinko/white_token.png")
+	tokenImg = rl.LoadTexture("./images/plinko/new_token.png")
 	barrierImg = rl.LoadTexture("./images/plinko/triangle.png")
 
 	pegs := generatePegs(screenWidth, screenHeight)
-	//dropPoints := []fPoint{}
 	tokenQueues := make([]tokenQueue, numDropQueues)
 	for i := 0; i < numDropQueues; i++ {
 		dropPoint := fPoint{(screenWidth/2 - float64(tokenImg.Width)) + float64(i-numDropQueues/2)*300, 20.0}
@@ -315,7 +316,7 @@ func (c *Core) CheckForCollision(delta float64) {
 
 		if b.y > gameHeight+50 {
 			b.falling = false
-			reward := uint64(c.rewardMultiplier) * b.Value
+			reward := b.Value.Mul(b.Value, big.NewInt(int64(c.rewardMultiplier)))
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, reward)
 			c.tokens = removeBall(c.tokens, idx)
 		}
@@ -373,10 +374,12 @@ func (c *Core) HandleMessage(args []string) {
 			}
 			return
 		}
-		var value uint64 = 1
+		value := big.NewInt(1)
 		if len(args) >= 5 {
-			if v, err := strconv.ParseUint(args[4], 10, 64); err == nil && v != 0 {
-				value = v
+			_, err := fmt.Sscan(args[4], value)
+			if err != nil {
+				log.Println("couldn't parse value from bot", err)
+				return
 			}
 		}
 		c.DropBall(n, value, args[2], color)
@@ -400,12 +403,11 @@ func (c *Core) Draw() {
 		v.Draw()
 	}
 	for k, v := range c.queues {
-		//text.Draw(screen, , gameFont, int(v.dropPosition.x), int(v.dropPosition.y)+35, color.RGBA{0x00, 0xff, 0x00, 0xff})
 		rl.DrawText(fmt.Sprint(k), int32(v.dropPosition.x), int32(v.dropPosition.y)+35, 72, rl.Green)
 	}
 }
 
-func (c *Core) DropBall(pos int, value uint64, playerName, playerColor string) {
+func (c *Core) DropBall(pos int, value *big.Int, playerName, playerColor string) {
 	// make a new token with its pos set to the selected drop point
 	if pos < 0 || pos >= len(c.queues) {
 		return // do nothing for now, but should return an error
@@ -417,7 +419,7 @@ func (c *Core) DropBall(pos int, value uint64, playerName, playerColor string) {
 
 func (c *Core) DropAll(playerName, playerColor string) {
 	for i := 0; i < len(c.queues); i++ {
-		c.DropBall(i, 1, playerName, playerColor)
+		c.DropBall(i, big.NewInt(1), playerName, playerColor)
 	}
 }
 
