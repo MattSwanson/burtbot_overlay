@@ -137,3 +137,9 @@ func (t *tank) Draw(myTurn bool) {
 	rl.DrawTextureEx(t.img, rl.Vector2{X: float32(t.x + xOffset), Y: float32(t.y + yOffset)}, float32(t.a*180/math.Pi), float32(t.scale), rl.White)
 	rl.DrawText(t.playerName, int32(t.x+t.w/2+10), int32(t.y-t.h), 24, textColor)
 }
+
+
+func (t *tank) DrawTurn(p int32) {
+	rl.DrawTextureEx(t.img, rl.Vector2{X: 0, Y: float32(p*tankSize)}, 0, float32(t.scale), rl.White)
+	rl.DrawText(t.playerName, int32(0+t.w/2+10), p*tankSize, 24, rl.Red)
+}

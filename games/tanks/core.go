@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/MattSwanson/burtbot_overlay/sound"
@@ -21,6 +22,7 @@ var boomImg rl.Texture2D
 type Core struct {
 	tanks         []*tank
 	currentTurn   int
+	turnOrder     []*tank
 	playersJoined int
 	terrainImg    rl.Texture2D
 	heightMap     []float64
@@ -39,17 +41,26 @@ type Core struct {
 	running       bool
 }
 
+func rotateTurns(s []*tank) []*tank {
+	return append(s[1:], s[0])
+}
+
+func (c *Core) removeTankFromTurnOrder(t *tank) {
+	tanks := []*tank{}
+	for _, tank := range c.turnOrder {
+		if t != tank {
+			tanks = append(tanks, tank)
+		}
+	}
+	c.turnOrder = tanks
+}
+
 func Load(sWidth, sHeight int) *Core {
 
 	boomImg = rl.LoadTexture("./images/tanks/tanks_boom.png")
 
 	tanks := []*tank{}
 	terrain, heightMap := generateTerrain(sWidth, sHeight)
-
-	// place the tanks at set x positions for now,
-	// y position is based on terrain
-	// check pixels in the given column until we find one which
-	// is not 0x00 alpha
 
 	w := (rand.Float64() - 0.5) * 100
 	return &Core{
@@ -71,23 +82,28 @@ func (c *Core) PlaceTank(num int, xpos int) {
 	c.tanks[num].setPosition(float64(xpos), y)
 }
 
-func (c *Core) advanceTurn(i int) {
-	if i == -1 || i > c.currentTurn {
-		c.currentTurn = (c.currentTurn + 1) % len(c.tanks)
-		return
-	}
-	if i <= c.currentTurn {
-		c.currentTurn %= len(c.tanks)
-	}
-}
+// func (c *Core) advanceTurn(i int) {
+// 	if i == -1 || i > c.currentTurn {
+// 		c.currentTurn = (c.currentTurn + 1) % len(c.tanks)
+// 		return
+// 	}
+// 	if i <= c.currentTurn {
+// 		c.currentTurn %= len(c.tanks)
+// 	}
+// }
 
 func (c *Core) Draw() {
 	if !c.running {
 		return
 	}
+	if c.gameStarted {
+		for i, t := range c.turnOrder {
+			t.DrawTurn(int32(i))
+		}
+	}
 	rl.DrawTexture(c.terrainImg, 0, 0, rl.White)
-	for i, tank := range c.tanks {
-		myTurn := c.currentTurn == i
+	for _, tank := range c.tanks {
+		myTurn := c.turnOrder[0] == tank
 		tank.Draw(myTurn)
 	}
 	if c.projectile != nil {
@@ -97,7 +113,7 @@ func (c *Core) Draw() {
 		rl.DrawTexture(boomImg, int32(c.boomX), int32(c.boomY), rl.White)
 	}
 	if c.gameStarted {
-		s := fmt.Sprintf("%s's turn. !tanks shoot <angle(degrees)> <velocity(1-100)>", c.tanks[c.currentTurn].playerName)
+		s := fmt.Sprintf("%s's turn. !tanks shoot <angle(degrees)> <velocity(1-100)>", c.turnOrder[0].playerName)
 		rl.DrawText(s, 75, 1350, 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
 	} else {
 		rl.DrawText("type '!tanks join' to join the game!", 75, 1350, 48, rl.Color{R: 0x00, G: 0xFF, B: 0x00, A: 0xFF})
@@ -172,7 +188,8 @@ func (c *Core) Update(delta float64) error {
 					time.Sleep(time.Second)
 					c.showBoom = false
 				}()
-				c.tanks = removeTank(c.tanks, v)
+				c.playersJoined--
+				removeTank(c.tanks, v)
 				if len(c.tanks) == 1 {
 					// win screen
 					c.winner = c.tanks[0].playerName
@@ -189,7 +206,17 @@ func (c *Core) Update(delta float64) error {
 				} else {
 					sound.Play("sosumi")
 				}
-				c.advanceTurn(v)
+				// c.advanceTurn(v)
+				// remove v from the turn order
+
+				fmt.Printf("tank: %p - turn: %p\n", tank, c.turnOrder[0])
+				if tank != c.turnOrder[0] {
+					c.removeTankFromTurnOrder(tank)
+					c.turnOrder = rotateTurns(c.turnOrder)
+				} else {
+					c.removeTankFromTurnOrder(tank)
+				}
+				fmt.Println(c.turnOrder)
 				return nil
 			}
 		}
@@ -198,7 +225,8 @@ func (c *Core) Update(delta float64) error {
 	//check for oob
 	if c.projectile.x < -100 || c.projectile.x > float64(c.screenWidth)+100 || c.projectile.y > float64(c.screenHeight) || c.projectile.y < -2000 {
 		c.projectile = nil
-		c.advanceTurn(-1)
+		// c.advanceTurn(-1)
+		c.turnOrder = rotateTurns(c.turnOrder)
 		return nil
 	}
 
@@ -216,7 +244,8 @@ func (c *Core) Update(delta float64) error {
 			// thunk
 			sound.Play("kerplunk")
 			c.projectile = nil
-			c.advanceTurn(-1)
+			//c.advanceTurn(-1)
+			c.turnOrder = rotateTurns(c.turnOrder)
 			return nil
 		}
 	}
@@ -231,13 +260,14 @@ func (c *Core) Reset() {
 	c.terrainImg, c.heightMap = generateTerrain(c.screenWidth, c.screenHeight)
 	c.tanks = []*tank{}
 	c.playersJoined = 0
-	c.currentTurn = 0
+	//c.currentTurn = 0
+	c.turnOrder = []*tank{}
 	c.wind = (rand.Float64() - 0.5) * 100
 	c.showBoom = false
 }
 
 func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
-	if !c.gameStarted || player != c.tanks[c.currentTurn].playerName {
+	if !c.gameStarted || !strings.HasPrefix(c.turnOrder[0].playerName, player) {
 		return
 	}
 	if totalVelocity < 1 {
@@ -245,12 +275,12 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 	}
 	totalVelocity = math.Min(totalVelocity, 100)
 	totalVelocity = maxShotVelocity * totalVelocity / 100
-	angle = angle*math.Pi/180.0 - c.tanks[c.currentTurn].a
-	pSpawnOffsetX := math.Cos(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
-	pSpawnOffsetY := math.Sin(angle) * c.tanks[c.currentTurn].projectileOffsetDistance
-	c.tanks[c.currentTurn].lastShotAngle = angle
-	p := NewProjectile(c.tanks[c.currentTurn].cx+pSpawnOffsetX,
-		c.tanks[c.currentTurn].cy-pSpawnOffsetY,
+	angle = angle*math.Pi/180.0 - c.turnOrder[0].a
+	pSpawnOffsetX := math.Cos(angle) * c.turnOrder[0].projectileOffsetDistance
+	pSpawnOffsetY := math.Sin(angle) * c.turnOrder[0].projectileOffsetDistance
+	c.turnOrder[0].lastShotAngle = angle
+	p := NewProjectile(c.turnOrder[0].cx+pSpawnOffsetX,
+		c.turnOrder[0].cy-pSpawnOffsetY,
 		c.wind, false)
 	vx := math.Cos(angle) * totalVelocity
 	vy := -math.Sin(angle) * totalVelocity
@@ -259,6 +289,9 @@ func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
 }
 
 func (c *Core) AddPlayer(playerName string, imgURL string) {
+	if strings.HasPrefix(playerName, "BurtStanton") {
+		playerName += fmt.Sprint(len(c.tanks))
+	}
 	xpos := 0
 	ind := 0
 	t := NewTank(playerName, imgURL)
@@ -285,20 +318,22 @@ func (c *Core) AddPlayer(playerName string, imgURL string) {
 			c.tanks = append(c.tanks, t)
 		} else if ind == 0 {
 			c.tanks = append([]*tank{t}, c.tanks...)
-			c.currentTurn = 1
+			// c.currentTurn = 1
 		} else {
-			front := make([]*tank, len(c.tanks[:ind])+1)
-			back := make([]*tank, len(c.tanks[ind:]))
-			for i := 0; i < ind; i++ {
-				front[i] = c.tanks[i]
+			tmp := make([]*tank, len(c.tanks)+1)
+			for i := 0; i < len(tmp); i++ {
+				if i < ind {
+					tmp[i] = c.tanks[i]
+				} else if i == ind {
+					tmp[i] = t
+				} else {
+					tmp[i] = c.tanks[i-1]
+				}
 			}
-			front[ind] = t
-			for i := ind; i < len(c.tanks); i++ {
-				back[i-ind] = c.tanks[i]
-			}
-			c.tanks = append(front, back...)
+			c.tanks = tmp
 		}
 	}
+	c.turnOrder = append(c.turnOrder, t)
 	c.playersJoined++
 	if !c.gameStarted {
 		t.setPosition(0+t.w/2, t.h*float64(c.playersJoined-1)+t.h)
