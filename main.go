@@ -12,10 +12,13 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/gousb"
+	"github.com/MattSwanson/ant-go"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
@@ -30,16 +33,25 @@ import (
 
 //var startTime time.Time
 var ga Game
-var mpos rl.Vector2
 var mwhipImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
 var tuxpos rl.Vector3 = rl.Vector3{X: 0, Y: 0, Z: -500}
 var showtux bool
+var gettingHR bool
+var currentHR int
+var usbDriver *ant.GarminStick3
+var signalChannel chan os.Signal
 
 const (
 	listenAddr = ":8081"
+	hrSensorID = 56482
+
+	hrThreshLow = 60
+	hrThreshMid = 90
+	hrThreshHigh = 120
+	hrThreshExt = 150
 )
 
 func init() {
@@ -136,8 +148,12 @@ func (g *Game) Update() {
 		if tuxpos.Z > 25 {
 			showtux = false
 		}
-	}
+	} 
 	select {
+	case signal := <-signalChannel:
+		if signal == os.Interrupt {
+			cleanUp()
+		}
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(rl.KeyUp):
@@ -286,7 +302,7 @@ func (g *Game) Draw() {
 	g.errorManager.Draw()
 
 	if g.bigMouse {
-		rl.DrawTexture(g.bigMouseImg, int32(mpos.X), int32(mpos.Y), rl.White)
+		rl.DrawTexture(g.bigMouseImg, rl.GetMouseX(), rl.GetMouseY(), rl.White)
 	}
 	if dedCount > 0 {
 		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
@@ -320,16 +336,36 @@ func (g *Game) Draw() {
 
 	g.bingoOverlay.Draw()
 
+	if gettingHR && currentHR != 0 {
+		hrColor := rl.Blue
+		switch {
+		case currentHR >= hrThreshExt:
+			hrColor = rl.Red
+		case currentHR >= hrThreshHigh:
+			hrColor = rl.Orange
+		case currentHR >= hrThreshMid:
+			hrColor = rl.Yellow
+		case currentHR >= hrThreshLow:
+			hrColor = rl.Green
+		}
+		rl.DrawText(fmt.Sprintf("%dbpm", currentHR), 2390, 1350, 48, hrColor)
+	}
+
 	rl.EndDrawing()
 }
 
 func main() {
-	rl.SetConfigFlags(rl.FlagFullscreenMode | rl.FlagWindowTopmost | rl.FlagWindowMousePassthrough | rl.FlagWindowTransparent | rl.FlagWindowUndecorated)
+	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent )
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
+	signalChannel = make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt)
+	usbCtx := gousb.NewContext()
+	defer usbCtx.Close()
+	startAntMonitor(usbCtx)
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	LoadSprites()
@@ -387,6 +423,26 @@ func main() {
 	}
 	rl.CloseAudioDevice()
 	rl.CloseWindow()
+}
+
+func startAntMonitor(ctx *gousb.Context) {
+	usbDriver = ant.NewGarminStick3()
+	scanner := ant.NewHeartRateScanner(usbDriver)
+	scanner.ListenForData(func(s *ant.HeartRateScannerState){
+		if s.DeviceID == hrSensorID { 
+			currentHR = int(s.ComputedHeartRate)
+		}
+	})
+	usbDriver.OnStartup(func(){
+		gettingHR = true
+		scanner.Scan()	
+	})
+	err := usbDriver.Open(ctx)
+	if err != nil {
+		log.Println("error opening usb driver: ", err.Error())
+		usbDriver = nil
+		return
+	}
 }
 
 func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
@@ -573,4 +629,15 @@ func (g *Game) quacksplosion() {
 		}
 		sound.Play("explosion")
 	}()
+}
+
+// perform any necessary cleanup here. should be called on
+// a interrupt signal and any other form of exit
+func cleanUp() {
+	fmt.Println("cleaning up after forcful exit")
+	if usbDriver != nil {
+		usbDriver.Close()
+	}
+	rl.CloseAudioDevice()
+	rl.CloseWindow()
 }
