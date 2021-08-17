@@ -82,16 +82,6 @@ func (c *Core) PlaceTank(num int, xpos int) {
 	c.tanks[num].setPosition(float64(xpos), y)
 }
 
-// func (c *Core) advanceTurn(i int) {
-// 	if i == -1 || i > c.currentTurn {
-// 		c.currentTurn = (c.currentTurn + 1) % len(c.tanks)
-// 		return
-// 	}
-// 	if i <= c.currentTurn {
-// 		c.currentTurn %= len(c.tanks)
-// 	}
-// }
-
 func (c *Core) Draw() {
 	if !c.running {
 		return
@@ -189,7 +179,7 @@ func (c *Core) Update(delta float64) error {
 					c.showBoom = false
 				}()
 				c.playersJoined--
-				removeTank(c.tanks, v)
+				c.tanks = removeTank(c.tanks, v)
 				if len(c.tanks) == 1 {
 					// win screen
 					c.winner = c.tanks[0].playerName
@@ -206,17 +196,13 @@ func (c *Core) Update(delta float64) error {
 				} else {
 					sound.Play("sosumi")
 				}
-				// c.advanceTurn(v)
-				// remove v from the turn order
 
-				fmt.Printf("tank: %p - turn: %p\n", tank, c.turnOrder[0])
 				if tank != c.turnOrder[0] {
 					c.removeTankFromTurnOrder(tank)
 					c.turnOrder = rotateTurns(c.turnOrder)
 				} else {
 					c.removeTankFromTurnOrder(tank)
 				}
-				fmt.Println(c.turnOrder)
 				return nil
 			}
 		}
@@ -260,7 +246,6 @@ func (c *Core) Reset() {
 	c.terrainImg, c.heightMap = generateTerrain(c.screenWidth, c.screenHeight)
 	c.tanks = []*tank{}
 	c.playersJoined = 0
-	//c.currentTurn = 0
 	c.turnOrder = []*tank{}
 	c.wind = (rand.Float64() - 0.5) * 100
 	c.showBoom = false
