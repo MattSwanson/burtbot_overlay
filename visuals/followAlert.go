@@ -26,7 +26,7 @@ var (
 func LoadFollowAlertAssets() {
 	largeGopher = rl.LoadTexture("./images/tux_goph.png")
 	speechBubble = rl.LoadTexture("./images/speech_bubble.png")
-	followFont = rl.LoadFontEx("caskaydia.ttf", followTextSize, nil, 0)
+	followFont = rl.LoadFontEx("./caskaydia.TTF", followTextSize, nil, 0)
 }
 
 func ShowFollowAlert(username string) {
