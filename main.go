@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/gousb"
 	"github.com/MattSwanson/ant-go"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
@@ -26,6 +25,7 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
+	"github.com/google/gousb"
 	"golang.org/x/net/context"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -34,6 +34,7 @@ import (
 //var startTime time.Time
 var ga Game
 var mwhipImg rl.Texture2D
+var mkImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
@@ -48,10 +49,10 @@ const (
 	listenAddr = ":8081"
 	hrSensorID = 56482
 
-	hrThreshLow = 60
-	hrThreshMid = 90
+	hrThreshLow  = 60
+	hrThreshMid  = 90
 	hrThreshHigh = 120
-	hrThreshExt = 150
+	hrThreshExt  = 150
 )
 
 func init() {
@@ -93,6 +94,7 @@ type Game struct {
 	bingoOverlay    *visuals.BingoOverlay
 	lastUpdate      time.Time
 	showWhip        bool
+	showMK          bool
 	errorManager    *visuals.ErrorManager
 }
 
@@ -114,6 +116,7 @@ const (
 	TanksCmd
 	BopCmd
 	MiracleCmd
+	MKCmd
 	LightsOutCmd
 	BingoCmd
 	LightsCmd
@@ -148,7 +151,7 @@ func (g *Game) Update() {
 		if tuxpos.Z > 25 {
 			showtux = false
 		}
-	} 
+	}
 	select {
 	case signal := <-signalChannel:
 		if signal == os.Interrupt {
@@ -225,6 +228,13 @@ func (g *Game) Update() {
 			go func() {
 				time.Sleep(time.Second * 5)
 				g.showWhip = false
+			}()
+		case MKCmd:
+			g.showMK = true
+			sound.Play("indigo")
+			go func() {
+				time.Sleep(time.Second * 2)
+				g.showMK = false
 			}()
 		case LightsCmd:
 			if key.args[0] == "set" {
@@ -334,6 +344,10 @@ func (g *Game) Draw() {
 		rl.DrawTextureEx(mwhipImg, rl.Vector2{X: 560, Y: 0}, 0, 0.6, rl.White)
 	}
 
+	if g.showMK {
+		rl.DrawTextureEx(mkImg, rl.Vector2{X: 0, Y: 500}, 0, 1.0, rl.White)
+	}
+
 	g.bingoOverlay.Draw()
 
 	if gettingHR && currentHR != 0 {
@@ -355,7 +369,7 @@ func (g *Game) Draw() {
 }
 
 func main() {
-	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent )
+	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
@@ -368,6 +382,7 @@ func main() {
 	startAntMonitor(usbCtx)
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
+	mkImg = rl.LoadTexture("./images/mk.png")
 	LoadSprites()
 	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
@@ -428,14 +443,14 @@ func main() {
 func startAntMonitor(ctx *gousb.Context) {
 	usbDriver = ant.NewGarminStick3()
 	scanner := ant.NewHeartRateScanner(usbDriver)
-	scanner.ListenForData(func(s *ant.HeartRateScannerState){
-		if s.DeviceID == hrSensorID { 
+	scanner.ListenForData(func(s *ant.HeartRateScannerState) {
+		if s.DeviceID == hrSensorID {
 			currentHR = int(s.ComputedHeartRate)
 		}
 	})
-	usbDriver.OnStartup(func(){
+	usbDriver.OnStartup(func() {
 		gettingHR = true
-		scanner.Scan()	
+		scanner.Scan()
 	})
 	err := usbDriver.Open(ctx)
 	if err != nil {
@@ -525,6 +540,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{BopCmd, fields[1:]}
 		case "miracle":
 			c <- cmd{MiracleCmd, []string{}}
+		case "mk":
+			c <- cmd{MKCmd, []string{}}
 		case "lo":
 			if len(fields) < 2 {
 				continue
