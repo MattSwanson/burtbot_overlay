@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"image/color"
 	_ "image/png"
@@ -44,6 +45,7 @@ var gettingHR bool
 var currentHR int
 var usbDriver *ant.GarminStick3
 var signalChannel chan os.Signal
+var useANT = false
 
 const (
 	listenAddr = ":8081"
@@ -56,6 +58,7 @@ const (
 )
 
 func init() {
+	flag.BoolVar(&useANT, "a", false, "enable ANT sensor")
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
@@ -233,7 +236,7 @@ func (g *Game) Update() {
 			g.showMK = true
 			sound.Play("indigo")
 			go func() {
-				time.Sleep(time.Second * 2)
+				time.Sleep(time.Millisecond * 500)
 				g.showMK = false
 			}()
 		case LightsCmd:
@@ -345,7 +348,7 @@ func (g *Game) Draw() {
 	}
 
 	if g.showMK {
-		rl.DrawTextureEx(mkImg, rl.Vector2{X: 0, Y: 500}, 0, 1.0, rl.White)
+		rl.DrawTextureEx(mkImg, rl.Vector2{X: 0, Y: 600}, 0, 1.0, rl.White)
 	}
 
 	g.bingoOverlay.Draw()
@@ -369,6 +372,7 @@ func (g *Game) Draw() {
 }
 
 func main() {
+	flag.Parse()
 	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
@@ -377,9 +381,11 @@ func main() {
 	sound.LoadSounds()
 	signalChannel = make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt)
-	usbCtx := gousb.NewContext()
-	defer usbCtx.Close()
-	startAntMonitor(usbCtx)
+	if useANT {
+		usbCtx := gousb.NewContext()
+		defer usbCtx.Close()
+		startAntMonitor(usbCtx)
+	}
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	mkImg = rl.LoadTexture("./images/mk.png")
@@ -447,6 +453,9 @@ func startAntMonitor(ctx *gousb.Context) {
 		if s.DeviceID == hrSensorID {
 			currentHR = int(s.ComputedHeartRate)
 		}
+	})
+	scanner.SetOnAttachCallback(func(){
+		fmt.Println("Ant sensor attached")	
 	})
 	usbDriver.OnStartup(func() {
 		gettingHR = true
