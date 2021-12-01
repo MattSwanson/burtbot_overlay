@@ -43,6 +43,32 @@ var tuxpos rl.Vector3 = rl.Vector3{X: 0, Y: 0, Z: -500}
 var showtux bool
 var gettingHR bool
 var currentHR int
+var nowPlaying string
+var npTextY float32
+var goodFont rl.Font
+var moos = []string{
+	"moo_a1",
+	"moo_a2",
+	"moo_a3",
+	"moo_a4",
+	"moo_a5",
+	"moo_a6",
+	"moo_d1",
+	"moo_d2",
+	"moo_d3",
+	"moo_d4",
+	"moo_d5",
+	"moo_h1",
+	"moo_h2",
+	"moo_h3",
+	"moo_h4",
+	"moo_n1",
+	"moo_n2",
+	"moo_n3",
+	"moo_n4",
+	"moo_n5",
+}
+
 var usbDriver *ant.GarminStick3
 var signalChannel chan os.Signal
 var useANT = false
@@ -55,6 +81,9 @@ const (
 	hrThreshMid  = 90
 	hrThreshHigh = 120
 	hrThreshExt  = 150
+
+	npTextTopY    = 25
+	npTextBottomY = 1375
 )
 
 func init() {
@@ -129,6 +158,10 @@ const (
 	DedCmd
 	CubeCmd
 	TuxCmd
+	NowPlayingCmd
+	NpTextCmd
+	MooCmd
+	DropsCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -271,6 +304,23 @@ func (g *Game) Update() {
 		case TuxCmd:
 			tuxpos.Z = -1000
 			showtux = true
+		case NowPlayingCmd:
+			if key.args[0] == "off" {
+				nowPlaying = ""
+			} else {
+				nowPlaying = key.args[0]
+			}
+		case NpTextCmd:
+			if key.args[0] == "top" {
+				npTextY = npTextTopY
+			} else if key.args[0] == "bottom" {
+				npTextY = npTextBottomY
+			}
+		case MooCmd:
+			sound.Play(moos[rand.Intn(len(moos))])
+		case DropsCmd:
+			fmt.Println("about to dro ps")
+			visuals.ShowDrops(key.args[0])
 		}
 	default:
 	}
@@ -335,6 +385,7 @@ func (g *Game) Draw() {
 	g.plinko.Draw()
 	g.bopometer.Draw()
 	cube.Draw()
+	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
 
 	if g.marqueesEnabled {
@@ -368,6 +419,10 @@ func (g *Game) Draw() {
 		rl.DrawText(fmt.Sprintf("%dbpm", currentHR), 2390, 1350, 48, hrColor)
 	}
 
+	if nowPlaying != "" {
+		rl.DrawTextEx(goodFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
+	}
+
 	rl.EndDrawing()
 }
 
@@ -393,11 +448,14 @@ func main() {
 	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
+	visuals.LoadDropsAssets()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
 	game := &ga
 	game.bigMouseImg = sprites[2]
 	LoadMarqueeFonts()
+	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil, 0)
+	npTextY = npTextBottomY
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
@@ -454,8 +512,8 @@ func startAntMonitor(ctx *gousb.Context) {
 			currentHR = int(s.ComputedHeartRate)
 		}
 	})
-	scanner.SetOnAttachCallback(func(){
-		fmt.Println("Ant sensor attached")	
+	scanner.SetOnAttachCallback(func() {
+		fmt.Println("Ant sensor attached")
 	})
 	usbDriver.OnStartup(func() {
 		gettingHR = true
@@ -580,6 +638,14 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{CubeCmd, fields[1:]}
 		case "tux":
 			c <- cmd{TuxCmd, []string{}}
+		case "nowplaying":
+			c <- cmd{NowPlayingCmd, []string{strings.Join(fields[1:], " ")}}
+		case "nptext":
+			c <- cmd{NpTextCmd, fields[1:]}
+		case "moo":
+			c <- cmd{MooCmd, []string{}}
+		case "itemdrops":
+			c <- cmd{DropsCmd, []string{txt[10:]}}
 		}
 
 		fmt.Println(fields)
@@ -591,6 +657,7 @@ func handleWrites(ctx context.Context, conn *net.Conn, wc chan string) {
 		select {
 		case <-ctx.Done():
 			fmt.Println("Canceling tcp write loop")
+			nowPlaying = ""
 			return
 		case s := <-wc:
 			n, err := fmt.Fprint(*conn, s)
