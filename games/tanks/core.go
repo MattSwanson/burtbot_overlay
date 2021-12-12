@@ -252,7 +252,7 @@ func (c *Core) Reset() {
 }
 
 func (c *Core) Shoot(player string, angle float64, totalVelocity float64) {
-	if !c.gameStarted || !strings.HasPrefix(c.turnOrder[0].playerName, player) {
+	if !c.gameStarted || !strings.HasPrefix(c.turnOrder[0].playerName, player) || c.projectile != nil {
 		return
 	}
 	if totalVelocity < 1 {
