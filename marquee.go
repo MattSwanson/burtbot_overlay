@@ -248,6 +248,9 @@ func getImageFromCDN(id string) (*imageInfo, error) {
 	var rimg *rl.Image
 	info := imageInfo{frameCount: 1}
 	imgType := resp.Header.Get("content-type")
+	if imgType == "" {
+		imgType = "image/png"
+	}
 	switch imgType {
 	case "image/gif":
 		gif, err := gif.DecodeAll(resp.Body)
