@@ -73,10 +73,12 @@ func sub(a, b vec2f) vec2f {
 	return vec2f{a.x - b.x, a.y - b.y}
 }
 
+// angle gets the angle between two vectors
 func angle(a, b vec2f) float64 {
 	return math.Acos(dot(a, b) / mag(a) * mag(b))
 }
 
+// mag gets the magnitude of a vector
 func mag(a vec2f) float64 {
 	return math.Sqrt(a.x*a.x + a.y*a.y)
 }
@@ -173,12 +175,21 @@ func (c *Core) CheckForCollision(delta float64) {
 		for _, peg := range c.pegs {
 			dx := (b.x + b.radius) - (peg.x + peg.radius)
 			dy := (b.y + b.radius) - (peg.y + peg.radius)
-			mag := math.Sqrt(dx*dx + dy*dy)
-			vmag := math.Sqrt(b.vx*b.vx + b.vy*b.vy)
+			mag := math.Hypot(dx, dy)
+			vmag := math.Hypot(b.vx, b.vy)
 			if mag <= peg.radius+b.radius {
 				b.vx = (drain * vmag) * (dx / mag)
 				b.vy = (drain * vmag) * (dy / mag)
 				// .05 -> .25
+
+				// to prevent getting "stuck" inside the peg
+				scale := (b.radius + peg.radius + 0.01) / mag
+				ndx := dx * scale
+				ndy := dy * scale
+				b.x = peg.x + peg.radius + ndx - b.radius
+				b.y = peg.y + peg.radius + ndy - b.radius
+				// maybe I should have put the origins at the center of the objects....
+
 				//c.sounds["bip"].SetVolume()
 				//c.sounds["bip"].Rewind()
 				//c.sounds["bip"].Play()
@@ -194,14 +205,14 @@ func (c *Core) CheckForCollision(delta float64) {
 			dy := b.y - ot.y
 
 			// magnitude of the collsion vector
-			mag := math.Sqrt(dx*dx + dy*dy)
+			mag := math.Hypot(dx, dy)
 
 			if mag <= ot.radius+b.radius {
 				// magnitude of this tokens velocity
-				vmag := math.Sqrt(b.vx*b.vx + b.vy*b.vy)
+				vmag := math.Hypot(b.vx, b.vy)
 
 				// magnitude of other tokens velocity
-				otvmag := math.Sqrt(ot.vx*ot.vx + ot.vy*ot.vy)
+				otvmag := math.Hypot(ot.vx, ot.vy)
 
 				// total velocity of the collision -- masses are equal so no need to worky about that
 				totalVelocity := vmag + otvmag
