@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -72,6 +73,7 @@ var moos = []string{
 var usbDriver *ant.GarminStick3
 var signalChannel chan os.Signal
 var useANT = false
+var obsCmd *exec.Cmd
 
 const (
 	listenAddr = ":8081"
@@ -162,6 +164,7 @@ const (
 	NpTextCmd
 	MooCmd
 	DropsCmd
+	StreamCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -321,6 +324,12 @@ func (g *Game) Update() {
 		case DropsCmd:
 			fmt.Println("about to dro ps")
 			visuals.ShowDrops(key.args[0])
+		case StreamCmd:
+			if key.args[0] == "start" {
+				startStream()
+			} else if key.args[0] == "stop" {
+				stopStream()
+			}
 		}
 	default:
 	}
@@ -360,7 +369,7 @@ func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
 
-	rl.DrawFPS(50, 50)
+	//rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
 
@@ -646,6 +655,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{MooCmd, []string{}}
 		case "itemdrops":
 			c <- cmd{DropsCmd, []string{txt[10:]}}
+		case "stream":
+			c <- cmd{StreamCmd, fields[1:]}
 		}
 
 		fmt.Println(fields)
@@ -722,6 +733,37 @@ func (g *Game) quacksplosion() {
 		}
 		sound.Play("explosion")
 	}()
+}
+
+// start the stream
+func startStream() bool {
+	if obsCmd != nil {
+		log.Println("obs is already running")
+		return false
+	}
+	// flatpak run com.obsproject.Studio --startstreaming
+	fmt.Println("attempting stream start")
+	cmd := exec.Command("flatpak", "run", "com.obsproject.Studio", "--startstreaming")
+	if err := cmd.Start(); err != nil {
+		log.Println(err)
+		return false
+	}
+	obsCmd = cmd
+	log.Println(fmt.Sprintf("Started obs with PID %d", cmd.Process.Pid))
+	return true
+}
+
+func stopStream() {
+	if obsCmd == nil {
+		return
+	}
+	cmd := exec.Command("flatpak", "kill", "com.obsproject.Studio")
+	if err := cmd.Start(); err != nil {
+		log.Println(err)
+		return
+	}
+	obsCmd.Process.Kill()
+	obsCmd = nil
 }
 
 // perform any necessary cleanup here. should be called on
