@@ -46,6 +46,7 @@ var gettingHR bool
 var currentHR int
 var nowPlaying string
 var npTextY float32
+var npBGY int32
 var goodFont rl.Font
 var moos = []string{
 	"moo_a1",
@@ -316,8 +317,10 @@ func (g *Game) Update() {
 		case NpTextCmd:
 			if key.args[0] == "top" {
 				npTextY = npTextTopY
+				npBGY = 0
 			} else if key.args[0] == "bottom" {
 				npTextY = npTextBottomY
+				npBGY = int32(npTextY - 10)
 			}
 		case MooCmd:
 			sound.Play(moos[rand.Intn(len(moos))])
@@ -429,6 +432,7 @@ func (g *Game) Draw() {
 	}
 
 	if nowPlaying != "" {
+		rl.DrawRectangle(0, npBGY, 2560, 75, rl.Color{R: 0, G: 0, B: 0, A: 192})
 		rl.DrawTextEx(goodFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
 	}
 
@@ -465,7 +469,7 @@ func main() {
 	LoadMarqueeFonts()
 	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil, 0)
 	npTextY = npTextBottomY
-
+	npBGY = int32(npTextY - 10)
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatal(err)
@@ -775,4 +779,5 @@ func cleanUp() {
 	}
 	rl.CloseAudioDevice()
 	rl.CloseWindow()
+	os.Exit(0)
 }
