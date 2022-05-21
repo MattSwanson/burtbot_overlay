@@ -13,12 +13,10 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/MattSwanson/ant-go"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
@@ -26,7 +24,6 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
-	"github.com/google/gousb"
 	"golang.org/x/net/context"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -69,8 +66,8 @@ var moos = []string{
 	"moo_n5",
 }
 
-var usbDriver *ant.GarminStick3
-var signalChannel chan os.Signal
+//var usbDriver *ant.GarminStick3
+//var signalChannel chan os.Signal
 var useANT = false
 
 const (
@@ -127,6 +124,8 @@ type Game struct {
 	lastUpdate      time.Time
 	showWhip        bool
 	showMK          bool
+	showDM          bool
+	showFSInfo      bool
 	errorManager    *visuals.ErrorManager
 }
 
@@ -162,6 +161,9 @@ const (
 	NpTextCmd
 	MooCmd
 	DropsCmd
+	DMCmd
+	ToggleFSInfoCmd
+	FSCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -182,6 +184,7 @@ var connMessages = []string{
 
 func (g *Game) Update() {
 	delta := float64(time.Since(g.lastUpdate).Milliseconds())
+
 	if showtux {
 		tuxpos.Z += float32(50.0 * delta / 1000)
 		if tuxpos.Z > 25 {
@@ -189,10 +192,10 @@ func (g *Game) Update() {
 		}
 	}
 	select {
-	case signal := <-signalChannel:
-		if signal == os.Interrupt {
-			cleanUp()
-		}
+	// case signal := <-signalChannel:
+	// 	if signal == os.Interrupt {
+	// 		cleanUp()
+	// 	}
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(rl.KeyUp):
@@ -321,6 +324,12 @@ func (g *Game) Update() {
 		case DropsCmd:
 			fmt.Println("about to dro ps")
 			visuals.ShowDrops(key.args[0])
+		case DMCmd:
+			g.showDM = !g.showDM
+		case ToggleFSInfoCmd:
+			g.showFSInfo = !g.showFSInfo
+		case FSCmd:
+			visuals.HandleFSCmd(key.args)
 		}
 	default:
 	}
@@ -343,6 +352,9 @@ func (g *Game) Update() {
 			}
 		}
 	}
+	if g.showDM {
+		visuals.UpdateDMarquee(delta)
+	}
 	g.tanks.Update(delta)
 	if g.errorManager.Visible {
 		g.errorManager.Update(delta)
@@ -360,7 +372,7 @@ func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
 
-	rl.DrawFPS(50, 50)
+	//rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
 
@@ -371,6 +383,9 @@ func (g *Game) Draw() {
 		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
 	}
 	g.tanks.Draw()
+	if g.showDM {
+		visuals.DrawDMarquee()
+	}
 	g.lightsout.Draw()
 
 	if g.gameRunning {
@@ -387,6 +402,9 @@ func (g *Game) Draw() {
 	cube.Draw()
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
+	if g.showFSInfo {
+		visuals.DrawFSInfo()
+	}
 
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
@@ -434,13 +452,13 @@ func main() {
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
-	signalChannel = make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt)
-	if useANT {
-		usbCtx := gousb.NewContext()
-		defer usbCtx.Close()
-		startAntMonitor(usbCtx)
-	}
+	//signalChannel = make(chan os.Signal, 1)
+	//signal.Notify(signalChannel, os.Interrupt)
+	// if useANT {
+	// 	usbCtx := gousb.NewContext()
+	// 	defer usbCtx.Close()
+	// 	startAntMonitor(usbCtx)
+	// }
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	mkImg = rl.LoadTexture("./images/mk.png")
@@ -449,6 +467,7 @@ func main() {
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	visuals.LoadDropsAssets()
+	visuals.LoadFSAssets()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
 	game := &ga
@@ -495,6 +514,9 @@ func main() {
 	game.lightsout = lightsout.NewGame(5, 5)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
+	if err := visuals.PollFS(); err != nil {
+		fmt.Println("Couldn't connect to sim")
+	}
 
 	for !rl.WindowShouldClose() {
 		game.Update()
@@ -504,7 +526,7 @@ func main() {
 	rl.CloseWindow()
 }
 
-func startAntMonitor(ctx *gousb.Context) {
+/*func startAntMonitor(ctx *gousb.Context) {
 	usbDriver = ant.NewGarminStick3()
 	scanner := ant.NewHeartRateScanner(usbDriver)
 	scanner.ListenForData(func(s *ant.HeartRateScannerState) {
@@ -525,7 +547,7 @@ func startAntMonitor(ctx *gousb.Context) {
 		usbDriver = nil
 		return
 	}
-}
+}*/
 
 func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	defer conn.Close()
@@ -646,6 +668,12 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{MooCmd, []string{}}
 		case "itemdrops":
 			c <- cmd{DropsCmd, []string{txt[10:]}}
+		case "dmtoggle":
+			c <- cmd{DMCmd, []string{}}
+		case "fsToggle":
+			c <- cmd{ToggleFSInfoCmd, []string{}}
+		case "fs":
+			c <- cmd{FSCmd, fields[1:]}
 		}
 
 		fmt.Println(fields)
@@ -728,9 +756,9 @@ func (g *Game) quacksplosion() {
 // a interrupt signal and any other form of exit
 func cleanUp() {
 	fmt.Println("cleaning up after forcful exit")
-	if usbDriver != nil {
-		usbDriver.Close()
-	}
-	rl.CloseAudioDevice()
-	rl.CloseWindow()
+	// if usbDriver != nil {
+	// 	usbDriver.Close()
+	// }
+	// rl.CloseAudioDevice()
+	// rl.CloseWindow()
 }
