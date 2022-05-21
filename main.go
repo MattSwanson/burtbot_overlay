@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -37,13 +38,14 @@ import (
 var ga Game
 var mwhipImg rl.Texture2D
 var mkImg rl.Texture2D
+var carImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
 var tuxpos rl.Vector3 = rl.Vector3{X: 0, Y: 0, Z: -500}
 var showtux bool
 var gettingHR bool
-var currentHR int
+var lastMetricsUpdate time.Time
 var nowPlaying string
 var npTextY float32
 var npBGY int32
@@ -78,14 +80,8 @@ var obsCmd *exec.Cmd
 
 const (
 	listenAddr = ":8081"
-	hrSensorID = 56482
 
-	hrThreshLow  = 60
-	hrThreshMid  = 90
-	hrThreshHigh = 120
-	hrThreshExt  = 150
-
-	npTextTopY    = 25
+	npTextTopY    = 10
 	npTextBottomY = 1375
 )
 
@@ -166,6 +162,7 @@ const (
 	MooCmd
 	DropsCmd
 	StreamCmd
+	MetricsCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -333,6 +330,13 @@ func (g *Game) Update() {
 			} else if key.args[0] == "stop" {
 				stopStream()
 			}
+		case MetricsCmd:
+			if !visuals.MetricsEnabled() {
+				visuals.EnableMetrics(true)
+				speak("Metrics have arrived.", true)
+			}
+			lastMetricsUpdate = time.Now()
+			visuals.HandleMetricsMessage(key.args)
 		}
 	default:
 	}
@@ -364,6 +368,10 @@ func (g *Game) Update() {
 		if err := g.sprites.sprites[i].Update(delta); err != nil {
 			return
 		}
+	}
+	if visuals.MetricsEnabled() && time.Since(lastMetricsUpdate).Seconds() > 10 {
+		go speak("Looks like I lost the metrics... Sorry about that.", true)
+		visuals.EnableMetrics(false)
 	}
 	g.lastUpdate = time.Now()
 }
@@ -416,20 +424,7 @@ func (g *Game) Draw() {
 
 	g.bingoOverlay.Draw()
 
-	if gettingHR && currentHR != 0 {
-		hrColor := rl.Blue
-		switch {
-		case currentHR >= hrThreshExt:
-			hrColor = rl.Red
-		case currentHR >= hrThreshHigh:
-			hrColor = rl.Orange
-		case currentHR >= hrThreshMid:
-			hrColor = rl.Yellow
-		case currentHR >= hrThreshLow:
-			hrColor = rl.Green
-		}
-		rl.DrawText(fmt.Sprintf("%dbpm", currentHR), 2390, 1350, 48, hrColor)
-	}
+	visuals.DrawMetrics()
 
 	if nowPlaying != "" {
 		rl.DrawRectangle(0, npBGY, 2560, 75, rl.Color{R: 0, G: 0, B: 0, A: 192})
@@ -441,6 +436,10 @@ func (g *Game) Draw() {
 
 func main() {
 	flag.Parse()
+
+	http.HandleFunc("/go_pro_start", goProConnected)
+	http.HandleFunc("/go_pro_stop", goProDisconnected)
+	go http.ListenAndServe(":8082", nil)
 	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
@@ -457,11 +456,13 @@ func main() {
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	mkImg = rl.LoadTexture("./images/mk.png")
+	carImg = rl.LoadTexture("./images/car.png")
 	LoadSprites()
 	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	visuals.LoadDropsAssets()
+	visuals.InitMetrics()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
 	game := &ga
@@ -521,9 +522,9 @@ func startAntMonitor(ctx *gousb.Context) {
 	usbDriver = ant.NewGarminStick3()
 	scanner := ant.NewHeartRateScanner(usbDriver)
 	scanner.ListenForData(func(s *ant.HeartRateScannerState) {
-		if s.DeviceID == hrSensorID {
+		/*if s.DeviceID == hrSensorID {
 			currentHR = int(s.ComputedHeartRate)
-		}
+		}*/
 	})
 	scanner.SetOnAttachCallback(func() {
 		fmt.Println("Ant sensor attached")
@@ -661,6 +662,14 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{DropsCmd, []string{txt[10:]}}
 		case "stream":
 			c <- cmd{StreamCmd, fields[1:]}
+		case "hr":
+			fallthrough
+		case "cars":
+			fallthrough
+		case "speed":
+			fallthrough
+		case "distance":
+			c <- cmd{MetricsCmd, fields}
 		}
 
 		fmt.Println(fields)
@@ -745,7 +754,6 @@ func startStream() bool {
 		log.Println("obs is already running")
 		return false
 	}
-	// flatpak run com.obsproject.Studio --startstreaming
 	fmt.Println("attempting stream start")
 	cmd := exec.Command("flatpak", "run", "com.obsproject.Studio", "--startstreaming")
 	if err := cmd.Start(); err != nil {
@@ -768,6 +776,16 @@ func stopStream() {
 	}
 	obsCmd.Process.Kill()
 	obsCmd = nil
+}
+
+func goProConnected(w http.ResponseWriter, r *http.Request) {
+	speak("Go pro connected", true)
+	fmt.Fprintf(w, "got it\n")
+}
+
+func goProDisconnected(w http.ResponseWriter, r *http.Request) {
+	speak("Go pro disconnected", true)
+	fmt.Fprintf(w, "go it\n")
 }
 
 // perform any necessary cleanup here. should be called on
