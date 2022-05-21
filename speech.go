@@ -20,6 +20,8 @@ const (
 )
 
 var cache []string // a slice of strings representing the sha256 of cached tts, loaded at init based on files present
+var voices []*texttospeechpb.Voice
+var currentSampleRate int32
 
 func init() {
 	cache = []string{}
@@ -33,6 +35,7 @@ func init() {
 }
 
 func speak(txt string, shouldCache bool) error {
+
 	var hash string
 	var cached bool
 	if shouldCache {
@@ -64,7 +67,7 @@ func speak(txt string, shouldCache bool) error {
 				cache = append(cache, filename)
 			}
 		}
-		wave := rl.NewWave(uint32(len(audioBytes)/2), ttsSampleRate, 16, 1, audioBytes[44:])
+		wave := rl.NewWave(uint32(len(audioBytes)/2), uint32(currentSampleRate), 16, 1, audioBytes[44:])
 		// garbage := []byte{}
 		// for i := 0; i < 100000; i++ {
 		// 	garbage = append(garbage, byte(rand.Intn(256)))
@@ -94,6 +97,13 @@ func speak(txt string, shouldCache bool) error {
 }
 
 func getTTS(txt string) ([]byte, error) {
+	if len(voices) < 1 {
+		var err error
+		voices, err = getAvailableVoices()
+		if err != nil {
+			return []byte{}, err
+		}
+	}
 	ctx, canc := context.WithTimeout(context.Background(), time.Second*10)
 	defer canc()
 	client, err := texttospeech.NewClient(ctx)
@@ -104,6 +114,7 @@ func getTTS(txt string) ([]byte, error) {
 	defer client.Close()
 
 	speed := rand.Float64() + 0.5
+	n := rand.Intn(len(voices))
 
 	req := texttospeechpb.SynthesizeSpeechRequest{
 		// set the text input to be synthesized
@@ -114,14 +125,14 @@ func getTTS(txt string) ([]byte, error) {
 		// voice gender
 		// en-US-Wavenet-E or en-US-Wavenet-J are top picks
 		Voice: &texttospeechpb.VoiceSelectionParams{
-			Name:         "en-US-Wavenet-J",
-			LanguageCode: "en-US",
-			//SsmlGender:   texttospeechpb.SsmlVoiceGender_NEUTRAL,
+			Name:         voices[n].Name,
+			LanguageCode: voices[n].LanguageCodes[0],
+			SsmlGender:   voices[n].SsmlGender,
 		},
 		// select the type of audio you want returned
 		AudioConfig: &texttospeechpb.AudioConfig{
 			AudioEncoding:   texttospeechpb.AudioEncoding_LINEAR16,
-			SampleRateHertz: 44100,
+			SampleRateHertz: voices[n].NaturalSampleRateHertz,
 			SpeakingRate:    speed,
 		},
 	}
@@ -132,24 +143,23 @@ func getTTS(txt string) ([]byte, error) {
 		return nil, err
 	}
 
+	currentSampleRate = voices[n].NaturalSampleRateHertz
+
 	return resp.AudioContent, nil
 }
 
-func getAvailableVoices() (string, error) {
+func getAvailableVoices() ([]*texttospeechpb.Voice, error) {
 	ctx := context.Background()
 	client, err := texttospeech.NewClient(ctx)
 	if err != nil {
 		log.Printf("Unable to start tts client: %s\n", err)
-		return "", err
+		return []*texttospeechpb.Voice{}, err
 	}
-	lvRequest := texttospeechpb.ListVoicesRequest{LanguageCode: "en-US"}
+	lvRequest := texttospeechpb.ListVoicesRequest{}
 	resp, err := client.ListVoices(ctx, &lvRequest)
 	if err != nil {
 		log.Printf("Unable to get the list of voices from the API: %s", err.Error())
-		return "", err
+		return []*texttospeechpb.Voice{}, err
 	}
-	for _, v := range resp.Voices {
-		fmt.Println(v.String())
-	}
-	return resp.String(), nil
+	return resp.Voices, nil
 }

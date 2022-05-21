@@ -18,6 +18,7 @@ import (
 )
 
 var marqueeFont rl.Font
+var xlMarqueeFont rl.Font
 var emoteCache map[string]*imageInfo
 
 const (
@@ -59,6 +60,8 @@ type Marquee struct {
 	x          float64
 	y          float64
 	text       string
+	font	   *rl.Font
+	textSize   float32 
 	totalWidth int
 	color      color.RGBA
 	oneShot    bool
@@ -76,16 +79,25 @@ func init() {
 
 func LoadMarqueeFonts() {
 	marqueeFont = rl.LoadFontEx("caskaydia.TTF", textSize, nil, 0)
+	xlMarqueeFont = rl.LoadFontEx("caskaydia.TTF", xlTextSize, nil, 0)
 }
 
 func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
-	//var currentFont *font.Face
-	// if rand.Intn(100) < 10 {
-	// 	currentFont = &marqueeFontXl
-	// } else {
-	// 	currentFont = &marqueeFont
-	// }
-	return &Marquee{speed: speed, color: color, oneShot: oneShot}
+	var currentFont *rl.Font
+	currentTextSize := float32(textSize)
+	if rand.Intn(100) < 10 {
+		currentFont = &xlMarqueeFont
+		currentTextSize = xlTextSize
+	} else {
+	 	currentFont = &marqueeFont
+	}
+	return &Marquee{
+		speed: speed, 
+		color: color, 
+		oneShot: oneShot,
+		font: currentFont,
+		textSize: currentTextSize,
+	}
 }
 
 func (m *Marquee) enable(b bool) {
@@ -148,19 +160,19 @@ func (m *Marquee) setText(j string) {
 			offset += v.end - v.start + len(txt) + 1
 			txt = strings.Trim(txt, " ")
 			m.sequence = append(m.sequence, txt)
-			m.totalWidth += int(rl.MeasureTextEx(marqueeFont, txt, textSize, 0).X)
+			m.totalWidth += int(rl.MeasureTextEx(*m.font, txt, m.textSize, 0).X)
 			offsetPoints = append(offsetPoints, float64(m.totalWidth))
 			m.sequence = append(m.sequence, v.imgInfo)
 			m.totalWidth += int(v.imgInfo.img.Width / int32(v.imgInfo.frameCount))
 			offsetPoints = append(offsetPoints, float64(m.totalWidth))
 		}
 		m.sequence = append(m.sequence, strippedMsg)
-		m.totalWidth += int(rl.MeasureTextEx(marqueeFont, strippedMsg, textSize, 0).X)
+		m.totalWidth += int(rl.MeasureTextEx(*m.font, strippedMsg, m.textSize, 0).X)
 		m.xOffsets = offsetPoints
 	} else {
 		m.xOffsets = []float64{0}
 		m.sequence = append(m.sequence, msg.RawMessage)
-		m.totalWidth = int(rl.MeasureTextEx(marqueeFont, msg.RawMessage, textSize, 0).X)
+		m.totalWidth = int(rl.MeasureTextEx(*m.font, msg.RawMessage, m.textSize, 0).X)
 		//m.totalWidth = m.textBounds.Dx()
 	}
 	m.text = msg.RawMessage
@@ -208,7 +220,7 @@ func (m *Marquee) Draw() {
 		for k, v := range m.sequence {
 			switch thing := v.(type) {
 			case string:
-				rl.DrawTextEx(marqueeFont, thing, rl.Vector2{X: float32(m.x + m.xOffsets[k]), Y: float32(m.y)}, textSize, 0, rl.Color(m.color))
+				rl.DrawTextEx(*m.font, thing, rl.Vector2{X: float32(m.x + m.xOffsets[k]), Y: float32(m.y)}, m.textSize, 0, rl.Color(m.color))
 			case *imageInfo:
 				drawX := int32(m.x + m.xOffsets[k])
 				drawY := int32(m.y)

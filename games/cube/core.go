@@ -11,11 +11,13 @@ import (
 )
 
 const (
-	cubeSize            = 3 // X x X
-	drawSize            = 80
-	lineSize    float32 = 3.0
-	drawOffsetX         = 150
-	drawOffsetY         = 1100
+	cubeSize             = 3 // X x X
+	drawSize             = 80
+	lineSize     float32 = 3.0
+	drawOffsetX          = 150
+	drawOffsetY          = 1100
+	shuffleDelay         = 100 // ms between moves
+	shuffleTime          = 15  // seconds
 )
 
 var running bool
@@ -440,9 +442,6 @@ func getColor(b byte) rl.Color {
 func shuffle() {
 
 	if randoCancelFunc != nil {
-		fmt.Println("canceling")
-		randoCancelFunc()
-		randoCancelFunc = nil
 		return
 	}
 	var c context.Context
@@ -477,12 +476,12 @@ func shuffle() {
 				case 9:
 					rotateBottomCW()
 				}
-				time.Sleep(25 * time.Millisecond)
+				time.Sleep(shuffleDelay * time.Millisecond)
 			}
 		}
 	}(c)
 	go func() {
-		time.Sleep(5 * time.Second)
+		time.Sleep(shuffleTime * time.Second)
 		randoCancelFunc()
 		randoCancelFunc = nil
 		hasShuffled = true

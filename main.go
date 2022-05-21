@@ -12,7 +12,9 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -33,15 +35,17 @@ import (
 var ga Game
 var mwhipImg rl.Texture2D
 var mkImg rl.Texture2D
+var carImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
 var tuxpos rl.Vector3 = rl.Vector3{X: 0, Y: 0, Z: -500}
 var showtux bool
 var gettingHR bool
-var currentHR int
+var lastMetricsUpdate time.Time
 var nowPlaying string
 var npTextY float32
+var npBGY int32
 var goodFont rl.Font
 var moos = []string{
 	"moo_a1",
@@ -69,17 +73,12 @@ var moos = []string{
 //var usbDriver *ant.GarminStick3
 //var signalChannel chan os.Signal
 var useANT = false
+var obsCmd *exec.Cmd
 
 const (
 	listenAddr = ":8081"
-	hrSensorID = 56482
 
-	hrThreshLow  = 60
-	hrThreshMid  = 90
-	hrThreshHigh = 120
-	hrThreshExt  = 150
-
-	npTextTopY    = 25
+	npTextTopY    = 10
 	npTextBottomY = 1375
 )
 
@@ -164,6 +163,8 @@ const (
 	DMCmd
 	ToggleFSInfoCmd
 	FSCmd
+	StreamCmd
+	MetricsCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -316,8 +317,10 @@ func (g *Game) Update() {
 		case NpTextCmd:
 			if key.args[0] == "top" {
 				npTextY = npTextTopY
+				npBGY = 0
 			} else if key.args[0] == "bottom" {
 				npTextY = npTextBottomY
+				npBGY = int32(npTextY - 10)
 			}
 		case MooCmd:
 			sound.Play(moos[rand.Intn(len(moos))])
@@ -330,6 +333,19 @@ func (g *Game) Update() {
 			g.showFSInfo = !g.showFSInfo
 		case FSCmd:
 			visuals.HandleFSCmd(key.args)
+		case StreamCmd:
+			if key.args[0] == "start" {
+				startStream()
+			} else if key.args[0] == "stop" {
+				stopStream()
+			}
+		case MetricsCmd:
+			if !visuals.MetricsEnabled() {
+				visuals.EnableMetrics(true)
+				speak("Metrics have arrived.", true)
+			}
+			lastMetricsUpdate = time.Now()
+			visuals.HandleMetricsMessage(key.args)
 		}
 	default:
 	}
@@ -364,6 +380,10 @@ func (g *Game) Update() {
 		if err := g.sprites.sprites[i].Update(delta); err != nil {
 			return
 		}
+	}
+	if visuals.MetricsEnabled() && time.Since(lastMetricsUpdate).Seconds() > 10 {
+		go speak("Looks like I lost the metrics... Sorry about that.", true)
+		visuals.EnableMetrics(false)
 	}
 	g.lastUpdate = time.Now()
 }
@@ -422,22 +442,10 @@ func (g *Game) Draw() {
 
 	g.bingoOverlay.Draw()
 
-	if gettingHR && currentHR != 0 {
-		hrColor := rl.Blue
-		switch {
-		case currentHR >= hrThreshExt:
-			hrColor = rl.Red
-		case currentHR >= hrThreshHigh:
-			hrColor = rl.Orange
-		case currentHR >= hrThreshMid:
-			hrColor = rl.Yellow
-		case currentHR >= hrThreshLow:
-			hrColor = rl.Green
-		}
-		rl.DrawText(fmt.Sprintf("%dbpm", currentHR), 2390, 1350, 48, hrColor)
-	}
+	visuals.DrawMetrics()
 
 	if nowPlaying != "" {
+		rl.DrawRectangle(0, npBGY, 2560, 75, rl.Color{R: 0, G: 0, B: 0, A: 192})
 		rl.DrawTextEx(goodFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
 	}
 
@@ -446,6 +454,10 @@ func (g *Game) Draw() {
 
 func main() {
 	flag.Parse()
+
+	http.HandleFunc("/go_pro_start", goProConnected)
+	http.HandleFunc("/go_pro_stop", goProDisconnected)
+	go http.ListenAndServe(":8082", nil)
 	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
@@ -462,12 +474,14 @@ func main() {
 
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	mkImg = rl.LoadTexture("./images/mk.png")
+	carImg = rl.LoadTexture("./images/car.png")
 	LoadSprites()
 	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	visuals.LoadDropsAssets()
 	visuals.LoadFSAssets()
+	visuals.InitMetrics()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
 	game := &ga
@@ -475,7 +489,7 @@ func main() {
 	LoadMarqueeFonts()
 	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil, 0)
 	npTextY = npTextBottomY
-
+	npBGY = int32(npTextY - 10)
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatal(err)
@@ -674,6 +688,16 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{ToggleFSInfoCmd, []string{}}
 		case "fs":
 			c <- cmd{FSCmd, fields[1:]}
+		case "stream":
+			c <- cmd{StreamCmd, fields[1:]}
+		case "hr":
+			fallthrough
+		case "cars":
+			fallthrough
+		case "speed":
+			fallthrough
+		case "distance":
+			c <- cmd{MetricsCmd, fields}
 		}
 
 		fmt.Println(fields)
@@ -750,6 +774,46 @@ func (g *Game) quacksplosion() {
 		}
 		sound.Play("explosion")
 	}()
+}
+
+// start the stream
+func startStream() bool {
+	if obsCmd != nil {
+		log.Println("obs is already running")
+		return false
+	}
+	fmt.Println("attempting stream start")
+	cmd := exec.Command("flatpak", "run", "com.obsproject.Studio", "--startstreaming")
+	if err := cmd.Start(); err != nil {
+		log.Println(err)
+		return false
+	}
+	obsCmd = cmd
+	log.Println(fmt.Sprintf("Started obs with PID %d", cmd.Process.Pid))
+	return true
+}
+
+func stopStream() {
+	if obsCmd == nil {
+		return
+	}
+	cmd := exec.Command("flatpak", "kill", "com.obsproject.Studio")
+	if err := cmd.Start(); err != nil {
+		log.Println(err)
+		return
+	}
+	obsCmd.Process.Kill()
+	obsCmd = nil
+}
+
+func goProConnected(w http.ResponseWriter, r *http.Request) {
+	speak("Go pro connected", true)
+	fmt.Fprintf(w, "got it\n")
+}
+
+func goProDisconnected(w http.ResponseWriter, r *http.Request) {
+	speak("Go pro disconnected", true)
+	fmt.Fprintf(w, "go it\n")
 }
 
 // perform any necessary cleanup here. should be called on
