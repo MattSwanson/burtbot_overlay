@@ -31,7 +31,7 @@ import (
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
-//var startTime time.Time
+// var startTime time.Time
 var ga Game
 var mwhipImg rl.Texture2D
 var mkImg rl.Texture2D
@@ -70,8 +70,8 @@ var moos = []string{
 	"moo_n5",
 }
 
-//var usbDriver *ant.GarminStick3
-//var signalChannel chan os.Signal
+// var usbDriver *ant.GarminStick3
+// var signalChannel chan os.Signal
 var useANT = false
 var obsCmd *exec.Cmd
 
