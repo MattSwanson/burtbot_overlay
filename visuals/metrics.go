@@ -102,7 +102,10 @@ func HandleMetricsMessage(args []string) {
 			break
 		}
 		d := n * MToMi
-		if d < estDistance {
+		// - 0.0001 to keep rounding errors from adding distance
+		// d < (estDistance-prevDistance) was returning true
+		// for values that appeared to be equal
+		if d < (estDistance-prevDistance)-0.0001 {
 			prevDistance = estDistance
 		}
 		estDistance = prevDistance + d
