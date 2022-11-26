@@ -9,7 +9,8 @@ import (
 // }
 
 type static struct {
-	noiseImage *rl.Image
+	//noiseImage  rl.Image
+	noiseTexture rl.Texture2D
 }
 
 // func (r *rando) next() uint32 {
@@ -45,10 +46,12 @@ func (s *static) Update() error {
 	// 	s.noiseImage.Pix[4*i+(screenWidth*4)+6] = uint8(x >> 8)
 	// 	s.noiseImage.Pix[4*i+(screenWidth*4)+7] = 0xff
 	// }
-	s.noiseImage = rl.GenImageWhiteNoise(screenWidth, screenHeight, 128)
+	noiseImage := rl.GenImageWhiteNoise(screenWidth, screenHeight, 128)
+	s.noiseTexture = rl.LoadTextureFromImage(noiseImage)
 	return nil
 }
 
 func (s *static) Draw() {
 	// screen.ReplacePixels(s.noiseImage.Pix)
+	rl.DrawTexture(s.noiseTexture, 0, 0, rl.White)
 }

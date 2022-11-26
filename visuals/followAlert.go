@@ -39,7 +39,7 @@ func ShowFollowAlert(username string) {
 	fmt.Println(userNamePosX)
 	alertVisible = true
 	go func() {
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 2)
 		alertVisible = false
 	}()
 }
