@@ -165,6 +165,8 @@ const (
 	FSCmd
 	StreamCmd
 	MetricsCmd
+	RaidAlert
+	SteamCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -346,6 +348,10 @@ func (g *Game) Update() {
 			}
 			lastMetricsUpdate = time.Now()
 			visuals.HandleMetricsMessage(key.args)
+		case RaidAlert:
+			g.raidAlert()
+		case SteamCmd:
+			visuals.NewSteam().GetRandomGame()
 		}
 	default:
 	}
@@ -422,9 +428,8 @@ func (g *Game) Draw() {
 	cube.Draw()
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
-	if g.showFSInfo {
-		visuals.DrawFSInfo()
-	}
+	visuals.DrawFSInfo(g.showFSInfo)
+	visuals.DrawSteamOverlay()
 
 	if g.marqueesEnabled {
 		for i := 0; i < len(g.marquees); i++ {
@@ -698,6 +703,10 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			fallthrough
 		case "distance":
 			c <- cmd{MetricsCmd, fields}
+		case "raidincoming":
+			c <- cmd{RaidAlert, []string{}}
+		case "steam":
+			c <- cmd{SteamCmd, []string{}}
 		}
 
 		fmt.Println(fields)
@@ -773,6 +782,17 @@ func (g *Game) quacksplosion() {
 			}
 		}
 		sound.Play("explosion")
+	}()
+}
+
+func (g *Game) raidAlert() {
+	go func() {
+		var sleepTime = time.Duration(500000000)
+		for i := 1; i <= 5; i++ {
+			sound.Play("voltage")
+			time.Sleep(sleepTime)
+		}
+		speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true)
 	}()
 }
 
