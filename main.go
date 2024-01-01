@@ -334,7 +334,7 @@ func (g *Game) Update() {
 		case ToggleFSInfoCmd:
 			g.showFSInfo = !g.showFSInfo
 		case FSCmd:
-			visuals.HandleFSCmd(key.args)
+			//visuals.HandleFSCmd(key.args)
 		case StreamCmd:
 			if key.args[0] == "start" {
 				startStream()
@@ -428,7 +428,7 @@ func (g *Game) Draw() {
 	cube.Draw()
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
-	visuals.DrawFSInfo(g.showFSInfo)
+	//visuals.DrawFSInfo(g.showFSInfo)
 	visuals.DrawSteamOverlay()
 
 	if g.marqueesEnabled {
@@ -485,7 +485,7 @@ func main() {
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	visuals.LoadDropsAssets()
-	visuals.LoadFSAssets()
+	//visuals.LoadFSAssets()
 	visuals.InitMetrics()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
@@ -533,9 +533,9 @@ func main() {
 	game.lightsout = lightsout.NewGame(5, 5)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
-	if err := visuals.PollFS(); err != nil {
+	/*if err := visuals.PollFS(); err != nil {
 		fmt.Println("Couldn't connect to sim")
-	}
+	}*/
 
 	for !rl.WindowShouldClose() {
 		game.Update()

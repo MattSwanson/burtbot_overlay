@@ -1,5 +1,5 @@
 package visuals
-
+/*
 import (
 	"encoding/xml"
 	"errors"
@@ -340,3 +340,4 @@ func LoadFlightPlan() {
 	departureID = fp.DepartureID
 	destinationID = fp.DestinationID
 }
+*/
