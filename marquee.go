@@ -60,8 +60,8 @@ type Marquee struct {
 	x          float64
 	y          float64
 	text       string
-	font	   *rl.Font
-	textSize   float32 
+	font       *rl.Font
+	textSize   float32
 	totalWidth int
 	color      color.RGBA
 	oneShot    bool
@@ -89,13 +89,13 @@ func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
 		currentFont = &xlMarqueeFont
 		currentTextSize = xlTextSize
 	} else {
-	 	currentFont = &marqueeFont
+		currentFont = &marqueeFont
 	}
 	return &Marquee{
-		speed: speed, 
-		color: color, 
-		oneShot: oneShot,
-		font: currentFont,
+		speed:    speed,
+		color:    color,
+		oneShot:  oneShot,
+		font:     currentFont,
 		textSize: currentTextSize,
 	}
 }
