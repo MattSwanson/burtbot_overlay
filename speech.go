@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+    "math/rand"
 	"strings"
 	"time"
 
@@ -16,6 +17,9 @@ import (
 
 const (
 	ttsSampleRate = 44100
+    defaultVoiceName = "en-US-Wavenet-J"
+    defaultVoiceLanguageCode = "en-US"
+    defaultVoiceSampleRate = 44100
 )
 
 var cache []string // a slice of strings representing the sha256 of cached tts, loaded at init based on files present
@@ -33,7 +37,7 @@ func init() {
 	}
 }
 
-func speak(txt string, shouldCache bool) error {
+func speak(txt string, shouldCache, useRandomVoice bool) error {
 
 	var hash string
 	var cached bool
@@ -52,7 +56,7 @@ func speak(txt string, shouldCache bool) error {
 	var err error
 	var sound rl.Sound
 	if !cached {
-		audioBytes, err = getTTS(txt)
+		audioBytes, err = getTTS(txt, useRandomVoice)
 		if err != nil {
 			log.Println("Couldn't get TTS: ", err.Error())
 			return err
@@ -95,7 +99,7 @@ func speak(txt string, shouldCache bool) error {
 	return nil
 }
 
-func getTTS(txt string) ([]byte, error) {
+func getTTS(txt string, useRandomVoice bool) ([]byte, error) {
 	if len(voices) < 1 {
 		var err error
 		voices, err = getAvailableVoices()
@@ -113,7 +117,6 @@ func getTTS(txt string) ([]byte, error) {
 	defer client.Close()
 
 	//speed := rand.Float64() + 0.5
-	//n := rand.Intn(len(voices))
 
 	req := texttospeechpb.SynthesizeSpeechRequest{
 		// set the text input to be synthesized
@@ -124,25 +127,32 @@ func getTTS(txt string) ([]byte, error) {
 		// voice gender
 		// en-US-Wavenet-E or en-US-Wavenet-J are top picks
 		Voice: &texttospeechpb.VoiceSelectionParams{
-			Name:         "en-US-Wavenet-J", //voices[n].Name,
-			LanguageCode: "en-US",           //voices[n].LanguageCodes[0],
-			//SsmlGender:   voices[n].SsmlGender,
+			Name:         defaultVoiceName,
+			LanguageCode: defaultVoiceLanguageCode,
 		},
 		// select the type of audio you want returned
 		AudioConfig: &texttospeechpb.AudioConfig{
 			AudioEncoding:   texttospeechpb.AudioEncoding_LINEAR16,
-			SampleRateHertz: 44100, //voices[n].NaturalSampleRateHertz,
+			SampleRateHertz: defaultVoiceSampleRate,
 			SpeakingRate:    1.0,
 		},
 	}
+    currentSampleRate = defaultVoiceSampleRate
+
+    if useRandomVoice {
+        n := rand.Intn(len(voices))
+        req.Voice.Name = voices[n].Name
+        req.Voice.LanguageCode = voices[n].LanguageCodes[0]
+        req.Voice.SsmlGender = voices[n].SsmlGender
+        req.AudioConfig.SampleRateHertz = voices[n].NaturalSampleRateHertz
+        currentSampleRate = voices[n].NaturalSampleRateHertz
+    }
 
 	resp, err := client.SynthesizeSpeech(ctx, &req)
 	if err != nil {
 		log.Printf("Couldn't synthesize speech: %s\n", err)
 		return nil, err
 	}
-
-	currentSampleRate = 44100 // voices[n].NaturalSampleRateHertz
 
 	return resp.AudioContent, nil
 }

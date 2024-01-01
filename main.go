@@ -253,7 +253,8 @@ func (g *Game) Update() {
 			g.marqueesEnabled = true
 		case TTS:
 			cache, _ := strconv.ParseBool(key.args[1])
-			go speak(key.args[0], cache)
+            randomVoice, _ := strconv.ParseBool(key.args[2])
+			go speak(key.args[0], cache, randomVoice)
 		case PlinkoCmd:
 			g.plinko.HandleMessage(key.args)
 		case TanksCmd:
@@ -344,7 +345,7 @@ func (g *Game) Update() {
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
 				visuals.EnableMetrics(true)
-				speak("Metrics have arrived.", true)
+				speak("Metrics have arrived.", true, false)
 			}
 			lastMetricsUpdate = time.Now()
 			visuals.HandleMetricsMessage(key.args)
@@ -388,7 +389,7 @@ func (g *Game) Update() {
 		}
 	}
 	if visuals.MetricsEnabled() && time.Since(lastMetricsUpdate).Seconds() > 10 {
-		go speak("Looks like I lost the metrics... Sorry about that.", true)
+		go speak("Looks like I lost the metrics... Sorry about that.", true, false)
 		visuals.EnableMetrics(false)
 	}
 	g.lastUpdate = time.Now()
@@ -517,7 +518,7 @@ func main() {
 				}
 			}
 			if !acceptedHost {
-				go speak("Intrusion Detected", true)
+				go speak("Intrusion Detected", true, false)
 				conn.Close()
 				continue
 			}
@@ -577,7 +578,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	defer cancel()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
-	go speak(msg, true)
+	go speak(msg, true, false)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		txt := scanner.Text()
@@ -627,10 +628,10 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 				c <- cmd{SingleMarqueeCmd, []string{txt[12:]}}
 			}
 		case "tts":
-			if len(fields) < 3 {
+			if len(fields) < 4 {
 				continue
 			}
-			c <- cmd{TTS, []string{strings.Join(fields[2:], " "), fields[1]}}
+			c <- cmd{TTS, []string{strings.Join(fields[2:], " "), fields[1], fields[2]}}
 		case "plinko":
 			if len(fields) < 2 {
 				continue
@@ -792,7 +793,7 @@ func (g *Game) raidAlert() {
 			sound.Play("voltage")
 			time.Sleep(sleepTime)
 		}
-		speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true)
+		speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true, false)
 	}()
 }
 
@@ -827,12 +828,12 @@ func stopStream() {
 }
 
 func goProConnected(w http.ResponseWriter, r *http.Request) {
-	speak("Go pro connected", true)
+	speak("Go pro connected", true, false)
 	fmt.Fprintf(w, "got it\n")
 }
 
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
-	speak("Go pro disconnected", true)
+	speak("Go pro disconnected", true, false)
 	fmt.Fprintf(w, "go it\n")
 }
 
