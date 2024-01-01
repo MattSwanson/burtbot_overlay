@@ -23,6 +23,7 @@ func LoadSounds() {
 	sounds["sosumi"] = rl.LoadSound("sounds/Sosumi.wav")
 	sounds["kerplunk"] = rl.LoadSound("sounds/kerplunk.wav")
 	sounds["explosion"] = rl.LoadSound("sounds/explosion-02.wav")
+	sounds["voltage"] = rl.LoadSound("sounds/Voltage.wav")
 	sounds["moo_a1"] = rl.LoadSound("sounds/moo/attack1.wav")
 	sounds["moo_a2"] = rl.LoadSound("sounds/moo/attack2.wav")
 	sounds["moo_a3"] = rl.LoadSound("sounds/moo/attack3.wav")
