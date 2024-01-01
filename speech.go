@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -113,8 +112,8 @@ func getTTS(txt string) ([]byte, error) {
 	}
 	defer client.Close()
 
-	speed := rand.Float64() + 0.5
-	n := rand.Intn(len(voices))
+	//speed := rand.Float64() + 0.5
+	//n := rand.Intn(len(voices))
 
 	req := texttospeechpb.SynthesizeSpeechRequest{
 		// set the text input to be synthesized
@@ -125,15 +124,15 @@ func getTTS(txt string) ([]byte, error) {
 		// voice gender
 		// en-US-Wavenet-E or en-US-Wavenet-J are top picks
 		Voice: &texttospeechpb.VoiceSelectionParams{
-			Name:         voices[n].Name,
-			LanguageCode: voices[n].LanguageCodes[0],
-			SsmlGender:   voices[n].SsmlGender,
+			Name:         "en-US-Wavenet-J", //voices[n].Name,
+			LanguageCode: "en-US",           //voices[n].LanguageCodes[0],
+			//SsmlGender:   voices[n].SsmlGender,
 		},
 		// select the type of audio you want returned
 		AudioConfig: &texttospeechpb.AudioConfig{
 			AudioEncoding:   texttospeechpb.AudioEncoding_LINEAR16,
-			SampleRateHertz: voices[n].NaturalSampleRateHertz,
-			SpeakingRate:    speed,
+			SampleRateHertz: 44100, //voices[n].NaturalSampleRateHertz,
+			SpeakingRate:    1.0,
 		},
 	}
 
@@ -143,7 +142,7 @@ func getTTS(txt string) ([]byte, error) {
 		return nil, err
 	}
 
-	currentSampleRate = voices[n].NaturalSampleRateHertz
+	currentSampleRate = 44100 // voices[n].NaturalSampleRateHertz
 
 	return resp.AudioContent, nil
 }
