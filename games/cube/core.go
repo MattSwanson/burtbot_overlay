@@ -2,32 +2,72 @@ package cube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
-	cubeSize             = 3 // X x X
-	drawSize             = 80
-	lineSize     float32 = 3.0
-	drawOffsetX          = 150
-	drawOffsetY          = 1100
-	shuffleDelay         = 100 // ms between moves
-	shuffleTime          = 15  // seconds
+	cubeSize = 3 // X x X
+	// drawSize             = 20 // 80
+	lineSize     float32       = 3.0
+	drawOffsetX                = 150
+	drawOffsetY                = 1100
+	shuffleDelay               = 5      // ms between moves
+	shuffleTime  time.Duration = 100000 // seconds
 )
 
+var drawSize float32 = 20
 var running bool
 var c *cube
 var randoCancelFunc context.CancelFunc
 var cubeLock sync.Mutex = sync.Mutex{}
 var hasShuffled bool
+var moveCount int
+var currentScore int
+var highScore int
 
 func init() {
-	resetCube()
+	j, err := os.ReadFile("cube.json")
+	if err != nil {
+		log.Println("couldn't load cube save")
+		resetCube()
+		return
+	}
+	data := struct {
+		Front      []byte
+		Back       []byte
+		Left       []byte
+		Right      []byte
+		Top        []byte
+		Bottom     []byte
+		TotalMoves int
+		HighScore  int
+	}{}
+	err = json.Unmarshal(j, &data)
+	if err != nil {
+		log.Println("couldn't parse cube save")
+		resetCube()
+	}
+	c = &cube{
+		front:  data.Front,
+		back:   data.Back,
+		top:    data.Top,
+		bottom: data.Bottom,
+		left:   data.Left,
+		right:  data.Right,
+	}
+	moveCount = data.TotalMoves
+	highScore = data.HighScore
+	hasShuffled = false
+
 }
 
 type cube struct {
@@ -198,11 +238,16 @@ func HandleCommand(args []string) {
 			rotateSCW()
 		}
 		// check for completion
+		moveCount++
 		if checkCube() {
 			fmt.Println("oh joy")
 		}
 		cubeLock.Unlock()
 	}
+}
+
+func GetHighScore() int {
+	return highScore
 }
 
 func resetCube() {
@@ -214,18 +259,64 @@ func resetCube() {
 		left:   []byte{'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'},
 		right:  []byte{'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R'},
 	}
+	moveCount = 0
+	highScore = 0
+	hasShuffled = false
 }
 
+// TODO Can we make a version of this which returns a level of completion?
+// I'd like to slow down the shuffling mess when it's like one move away??
 func checkCube() bool {
 	complete := true
 	for i := 0; i < len(c.front); i++ {
-		if c.front[i] != c.front[4] || c.back[i] != c.front[4] || c.top[i] != c.top[4] ||
+		if c.front[i] != c.front[4] || c.back[i] != c.back[4] || c.top[i] != c.top[4] ||
 			c.bottom[i] != c.bottom[4] || c.left[i] != c.left[4] || c.right[i] != c.right[4] {
 			return false
 		}
 	}
 	hasShuffled = false
 	return complete
+}
+
+// Simply count the matches to each center cube face[4]
+// A solved cube would be 48
+// One move away would be 36 - actually... this could be 2 moves away too...
+//   - unless we track how close certain parts are to their target face,
+//     if that makes any sense
+//
+// A score between 36 and 48 could actually require more moves
+//
+//	and some may be un obtainable
+//
+// 24 could be two moves and also 26
+// There's probably a better way to do this, but I just want to slow the shuffle
+// When it's one move away
+func scoreCube() int {
+	var score int
+	for i := 0; i < len(c.front); i++ {
+		if i == 4 {
+			continue
+		}
+		if c.front[i] == c.front[4] {
+			score++
+		}
+		if c.back[i] == c.back[4] {
+			score++
+		}
+		if c.left[i] == c.left[4] {
+			score++
+		}
+		if c.right[i] == c.right[4] {
+			score++
+		}
+		if c.top[i] == c.top[4] {
+			score++
+		}
+		if c.bottom[i] == c.bottom[4] {
+			score++
+		}
+	}
+	return score
 }
 
 func rotateFaceCW(face []byte) {
@@ -357,7 +448,7 @@ func Draw() {
 
 		// we know the bottom 3 need to butt up agains the top of the front face
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},          // TL
+			{X: drawOffsetX + drawSize*float32(k%cubeSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},               // TL
 			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                               // BL
 			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)}, // TR
 			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                      // BR
@@ -418,6 +509,9 @@ func Draw() {
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY - drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize, Y: drawOffsetY - drawSize}, lineSize, rl.Black)
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize/2, Y: drawOffsetY - drawSize/2}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize/2, Y: drawOffsetY - drawSize/2}, lineSize, rl.Black)
 
+	rl.DrawText(fmt.Sprintf("Score: %d", currentScore), drawOffsetX, drawOffsetY-50, 16, rl.Orange)
+	rl.DrawText(fmt.Sprintf("Moves: %d", moveCount), drawOffsetX, drawOffsetY+100, 16, rl.Orange)
+	rl.DrawText(fmt.Sprintf("High: %d", highScore), drawOffsetX, drawOffsetY+75, 16, rl.Orange)
 }
 
 func getColor(b byte) rl.Color {
@@ -440,7 +534,6 @@ func getColor(b byte) rl.Color {
 }
 
 func shuffle() {
-
 	if randoCancelFunc != nil {
 		return
 	}
@@ -453,7 +546,7 @@ func shuffle() {
 			case <-ctx.Done():
 				return
 			default:
-				r := rand.Intn(10)
+				r := rand.Intn(7)
 				switch r {
 				case 0:
 					rotateFrontCW()
@@ -466,17 +559,29 @@ func shuffle() {
 				case 4:
 					rotateMCW()
 				case 5:
-					rotateXCW()
-				case 6:
-					rotateYCW()
-				case 7:
-					rotateZCW()
-				case 8:
 					rotateBackCW()
-				case 9:
+				case 6:
 					rotateBottomCW()
 				}
-				time.Sleep(shuffleDelay * time.Millisecond)
+				moveCount++
+				currentScore = scoreCube()
+				if currentScore > highScore {
+					highScore = currentScore
+				}
+				var timeToWait time.Duration = shuffleDelay
+				if currentScore == 48 {
+					fmt.Println("OMG IT DEIFN THSK WHOW")
+					hasShuffled = true
+					cubeLock.Unlock()
+					return
+				}
+				drawSize = 20
+				if currentScore == 36 || currentScore == 24 || currentScore == 26 {
+					sound.Play("sosumi")
+					drawSize = 80
+					timeToWait = 10000
+				}
+				time.Sleep(timeToWait * time.Millisecond)
 			}
 		}
 	}(c)
@@ -487,4 +592,33 @@ func shuffle() {
 		hasShuffled = true
 		cubeLock.Unlock()
 	}()
+}
+
+func SaveCube() {
+	if randoCancelFunc != nil {
+		randoCancelFunc()
+	}
+	data := struct {
+		Front      []byte
+		Back       []byte
+		Left       []byte
+		Right      []byte
+		Top        []byte
+		Bottom     []byte
+		TotalMoves int
+		HighScore  int
+	}{
+		Front:      c.front,
+		Back:       c.back,
+		Left:       c.left,
+		Right:      c.right,
+		Top:        c.top,
+		Bottom:     c.bottom,
+		TotalMoves: moveCount,
+		HighScore:  highScore,
+	}
+	json, _ := json.Marshal(data)
+	if err := os.WriteFile("cube.json", json, 0644); err != nil {
+		log.Println(err.Error())
+	}
 }

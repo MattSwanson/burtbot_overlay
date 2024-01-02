@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+    "os/signal"
 	"strconv"
 	"strings"
 	"time"
@@ -71,7 +72,7 @@ var moos = []string{
 }
 
 // var usbDriver *ant.GarminStick3
-// var signalChannel chan os.Signal
+var signalChannel chan os.Signal
 var useANT = false
 var obsCmd *exec.Cmd
 
@@ -195,10 +196,10 @@ func (g *Game) Update() {
 		}
 	}
 	select {
-	// case signal := <-signalChannel:
-	// 	if signal == os.Interrupt {
-	// 		cleanUp()
-	// 	}
+	case signal := <-signalChannel:
+		if signal == os.Interrupt {
+			cleanUp()
+		}
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(rl.KeyUp):
@@ -470,8 +471,8 @@ func main() {
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
-	//signalChannel = make(chan os.Signal, 1)
-	//signal.Notify(signalChannel, os.Interrupt)
+	signalChannel = make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt)
 	// if useANT {
 	// 	usbCtx := gousb.NewContext()
 	// 	defer usbCtx.Close()
@@ -846,4 +847,7 @@ func cleanUp() {
 	// }
 	// rl.CloseAudioDevice()
 	// rl.CloseWindow()
+    fmt.Println("save the cube!")
+    cube.SaveCube()
+    os.Exit(0)
 }
