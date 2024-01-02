@@ -631,7 +631,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			if len(fields) < 4 {
 				continue
 			}
-			c <- cmd{TTS, []string{strings.Join(fields[2:], " "), fields[1], fields[2]}}
+			c <- cmd{TTS, []string{strings.Join(fields[3:], " "), fields[1], fields[2]}}
 		case "plinko":
 			if len(fields) < 2 {
 				continue
