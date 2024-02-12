@@ -1,4 +1,4 @@
-package main
+package visuals
 
 import (
 	"encoding/json"
@@ -20,15 +20,18 @@ import (
 var marqueeFont rl.Font
 var xlMarqueeFont rl.Font
 var emoteCache map[string]*imageInfo
+var marquees []*Marquee
+var marqueesEnabled bool
 
 const (
-	textSize   = 120
-	xlTextSize = 512
+    DefaultMarqueeSpeed = 350
+	marqueeTextSize   = 120
+    xlMarqueeTextSize = 512
 	xlYOffset  = screenHeight / 2
 	regYOffset = -5
 )
 
-type marqueeMsg struct {
+type MarqueeMsg struct {
 	RawMessage string `json:"rawMessage"`
 	Emotes     string `json:"emotes"`
 }
@@ -78,40 +81,56 @@ func init() {
 }
 
 func LoadMarqueeFonts() {
-	marqueeFont = rl.LoadFontEx("caskaydia.TTF", textSize, nil, 0)
-	xlMarqueeFont = rl.LoadFontEx("caskaydia.TTF", xlTextSize, nil, 0)
+	marqueeFont = rl.LoadFontEx("caskaydia.TTF", marqueeTextSize, nil, 0)
+	xlMarqueeFont = rl.LoadFontEx("caskaydia.TTF", xlMarqueeTextSize, nil, 0)
 }
 
-func NewMarquee(speed float64, color color.RGBA, oneShot bool) *Marquee {
-	var currentFont *rl.Font
-	currentTextSize := float32(textSize)
-	if rand.Intn(100) < 10 {
-		currentFont = &xlMarqueeFont
-		currentTextSize = xlTextSize
-	} else {
-		currentFont = &marqueeFont
+func createBaseMarquee() *Marquee {
+    m := &Marquee {
+        font: &marqueeFont,
+        textSize: float32(marqueeTextSize),
+        color: color.RGBA{0,255,0,255},
+        oneShot: false,
+        speed: DefaultMarqueeSpeed,
+    }
+    marquees = append(marquees, m)
+    return m
+}
+
+func NewMarquee(textJson string, speed float64, color color.RGBA, oneShot bool) {
+	msg := MarqueeMsg{}
+	err := json.Unmarshal([]byte(textJson), &msg)
+	if err != nil {
+		log.Println(err.Error())
+		return
 	}
-	return &Marquee{
-		speed:    speed,
-		color:    color,
-		oneShot:  oneShot,
-		font:     currentFont,
-		textSize: currentTextSize,
+    m := createBaseMarquee()
+    m.oneShot = oneShot
+    textHeight := int(rl.MeasureTextEx(*m.font, msg.RawMessage, m.textSize, 0).Y)
+	m.y = float64(rand.Intn(screenHeight - textHeight))
+    m.setText(msg)
+}
+
+func NewMarqueeWithPosition(textJson string, posPercentY float64, oneShot bool) {
+	msg := MarqueeMsg{}
+	err := json.Unmarshal([]byte(textJson), &msg)
+	if err != nil {
+		log.Println(err.Error())
+		return
 	}
+    m := createBaseMarquee()
+    m.oneShot = oneShot
+    textHeight := int(rl.MeasureTextEx(*m.font, msg.RawMessage, m.textSize, 0).Y)
+	m.y = float64(screenHeight - textHeight) * posPercentY
+    m.setText(msg)
 }
 
 func (m *Marquee) enable(b bool) {
 	m.on = b
 }
 
-// setText takes a json string that decodes to a marqueeMsg struct
-func (m *Marquee) setText(j string) {
-	msg := marqueeMsg{}
-	err := json.Unmarshal([]byte(j), &msg)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
+// setText takes a json string that decodes to a MarqueeMsg struct
+func (m *Marquee) setText(msg MarqueeMsg) {
 	m.xOffsets = []float64{}
 	m.sequence = sequence{}
 	eIndices := emoteIndices{}
@@ -178,14 +197,14 @@ func (m *Marquee) setText(j string) {
 	m.text = msg.RawMessage
 	//m.emotes = msgEmotes
 	// 0 to screenHeight - m.textBounds.Dy() + m.yOffset
-	m.y = float64(rand.Intn(screenHeight - 100))
 	m.color = color.RGBA{uint8(rand.Intn(255)), uint8(rand.Intn(255)), uint8(rand.Intn(255)), 0xff}
 	m.x = screenWidth
 
 	m.on = true
+    marqueesEnabled = true
 }
 
-func (m *Marquee) Update(delta float64) error {
+func (m *Marquee) update(delta float64) error {
 	m.x -= m.speed * delta / 1000.0
 	if m.x+float64(m.totalWidth) < 0 {
 		if m.oneShot {
@@ -197,13 +216,28 @@ func (m *Marquee) Update(delta float64) error {
 	return nil
 }
 
-func UpdateEmoteCache(delta float64) {
+func UpdateMarquees(delta float64) error {
+    if !marqueesEnabled {
+        return nil
+    }
+    updateEmoteCache(delta)
+    for i := 0; i < len(marquees); i++ {
+        if err := marquees[i].update(delta); err != nil {
+            copy(marquees[i:], marquees[i+1:])
+            marquees[len(marquees)-1] = nil
+            marquees = marquees[:len(marquees)-1]
+        }
+    }
+    return nil
+}
+
+func updateEmoteCache(delta float64) {
 	for _, e := range emoteCache {
-		e.Update(delta)
+		e.update(delta)
 	}
 }
 
-func (i *imageInfo) Update(delta float64) {
+func (i *imageInfo) update(delta float64) {
 	if !i.animated {
 		return
 	}
@@ -215,7 +249,21 @@ func (i *imageInfo) Update(delta float64) {
 
 }
 
-func (m *Marquee) Draw() {
+func DisableMarquees() {
+    marqueesEnabled = false
+    marquees = []*Marquee{}
+}
+
+func DrawMarquees() {
+    if !marqueesEnabled {
+        return
+    }
+    for _, m := range marquees {
+        m.draw()
+    }
+}
+
+func (m *Marquee) draw() {
 	if m.on {
 		for k, v := range m.sequence {
 			switch thing := v.(type) {

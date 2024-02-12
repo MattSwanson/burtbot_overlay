@@ -117,8 +117,6 @@ type Game struct {
 	currentInput    int
 	bigMouse        bool
 	bigMouseImg     rl.Texture2D
-	marquees        []*Marquee
-	marqueesEnabled bool
 	bopometer       *visuals.Bopometer
 	bingoOverlay    *visuals.BingoOverlay
 	lastUpdate      time.Time
@@ -239,19 +237,12 @@ func (g *Game) Update() {
 			}
 		case MarqueeCmd:
 			if key.args[0] == "off" {
-				g.marqueesEnabled = false
-				g.marquees = []*Marquee{}
+                visuals.DisableMarquees()
 				break
 			}
-			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
-			m.setText(key.args[0])
-			g.marquees = append(g.marquees, m)
-			g.marqueesEnabled = true
+			visuals.NewMarquee(key.args[0], float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
 		case SingleMarqueeCmd:
-			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
-			m.setText(key.args[0])
-			g.marquees = append(g.marquees, m)
-			g.marqueesEnabled = true
+			visuals.NewMarquee(key.args[0], float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
 		case TTS:
 			cache, _ := strconv.ParseBool(key.args[1])
             randomVoice, _ := strconv.ParseBool(key.args[2])
@@ -366,16 +357,7 @@ func (g *Game) Update() {
 		g.staticLayer.Update()
 	}
 	g.bopometer.Update(delta)
-	if g.marqueesEnabled {
-		UpdateEmoteCache(delta)
-		for i := 0; i < len(g.marquees); i++ {
-			if err := g.marquees[i].Update(delta); err != nil {
-				copy(g.marquees[i:], g.marquees[i+1:])
-				g.marquees[len(g.marquees)-1] = nil
-				g.marquees = g.marquees[:len(g.marquees)-1]
-			}
-		}
-	}
+    visuals.UpdateMarquees(delta)
 	if g.showDM {
 		visuals.UpdateDMarquee(delta)
 	}
@@ -433,11 +415,7 @@ func (g *Game) Draw() {
 	//visuals.DrawFSInfo(g.showFSInfo)
 	visuals.DrawSteamOverlay()
 
-	if g.marqueesEnabled {
-		for i := 0; i < len(g.marquees); i++ {
-			g.marquees[i].Draw()
-		}
-	}
+    visuals.DrawMarquees()
 
 	if g.showWhip {
 		rl.DrawTextureEx(mwhipImg, rl.Vector2{X: 560, Y: 0}, 0, 0.6, rl.White)
@@ -493,7 +471,7 @@ func main() {
 	ga.connWriteChan = make(chan string)
 	game := &ga
 	game.bigMouseImg = sprites[2]
-	LoadMarqueeFonts()
+	visuals.LoadMarqueeFonts()
 	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil, 0)
 	npTextY = npTextBottomY
 	npBGY = int32(npTextY - 10)
