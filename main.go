@@ -24,6 +24,7 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
+    "github.com/MattSwanson/burtbot_overlay/planes"
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/speech"
@@ -518,6 +519,12 @@ func main() {
 		fmt.Println("Couldn't connect to sim")
 	}*/
 
+    go func(){
+        for true {
+            planes.CheckForPlanes()
+            time.Sleep(time.Second * 5)
+        }
+    }()
 	for !rl.WindowShouldClose() {
 		game.Update()
 		game.Draw()
