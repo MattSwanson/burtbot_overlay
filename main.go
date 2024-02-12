@@ -26,6 +26,7 @@ import (
 	"github.com/MattSwanson/burtbot_overlay/games/tanks"
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
+	"github.com/MattSwanson/burtbot_overlay/speech"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
 	"golang.org/x/net/context"
 
@@ -246,7 +247,7 @@ func (g *Game) Update() {
 		case TTS:
 			cache, _ := strconv.ParseBool(key.args[1])
             randomVoice, _ := strconv.ParseBool(key.args[2])
-			go speak(key.args[0], cache, randomVoice)
+			go speech.Speak(key.args[0], cache, randomVoice)
 		case PlinkoCmd:
 			g.plinko.HandleMessage(key.args)
 		case TanksCmd:
@@ -337,7 +338,7 @@ func (g *Game) Update() {
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
 				visuals.EnableMetrics(true)
-				speak("Metrics have arrived.", true, false)
+				speech.Speak("Metrics have arrived.", true, false)
 			}
 			lastMetricsUpdate = time.Now()
 			visuals.HandleMetricsMessage(key.args)
@@ -372,7 +373,7 @@ func (g *Game) Update() {
 		}
 	}
 	if visuals.MetricsEnabled() && time.Since(lastMetricsUpdate).Seconds() > 10 {
-		go speak("Looks like I lost the metrics... Sorry about that.", true, false)
+		go speech.Speak("Looks like I lost the metrics... Sorry about that.", true, false)
 		visuals.EnableMetrics(false)
 	}
 	g.lastUpdate = time.Now()
@@ -497,7 +498,7 @@ func main() {
 				}
 			}
 			if !acceptedHost {
-				go speak("Intrusion Detected", true, false)
+				go speech.Speak("Intrusion Detected", true, false)
 				conn.Close()
 				continue
 			}
@@ -557,7 +558,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	defer cancel()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
-	go speak(msg, true, false)
+	go speech.Speak(msg, true, false)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		txt := scanner.Text()
@@ -772,7 +773,7 @@ func (g *Game) raidAlert() {
 			sound.Play("voltage")
 			time.Sleep(sleepTime)
 		}
-		speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true, false)
+		speech.Speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true, false)
 	}()
 }
 
@@ -807,12 +808,12 @@ func stopStream() {
 }
 
 func goProConnected(w http.ResponseWriter, r *http.Request) {
-	speak("Go pro connected", true, false)
+	speech.Speak("Go pro connected", true, false)
 	fmt.Fprintf(w, "got it\n")
 }
 
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
-	speak("Go pro disconnected", true, false)
+	speech.Speak("Go pro disconnected", true, false)
 	fmt.Fprintf(w, "go it\n")
 }
 

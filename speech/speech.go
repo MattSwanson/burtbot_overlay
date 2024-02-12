@@ -1,4 +1,4 @@
-package main
+package speech
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func init() {
 	}
 }
 
-func speak(txt string, shouldCache, useRandomVoice bool) error {
+func Speak(txt string, shouldCache, useRandomVoice bool) error {
 
 	var hash string
 	var cached bool
