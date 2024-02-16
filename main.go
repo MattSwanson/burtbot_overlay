@@ -77,6 +77,7 @@ var moos = []string{
 var signalChannel chan os.Signal
 var useANT = false
 var obsCmd *exec.Cmd
+var camera rl.Camera3D
 
 const (
 	listenAddr = ":8081"
@@ -383,18 +384,21 @@ func (g *Game) Update() {
 func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
+    rl.DrawPixel(0,0,rl.Black)
+    rl.BeginMode3D(camera)
+    if showtux {
+        rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
+    }
+    rl.EndMode3D()
 
-	//rl.DrawFPS(50, 50)
+//	rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
 
-	if g.bigMouse {
-		rl.DrawTexture(g.bigMouseImg, rl.GetMouseX(), rl.GetMouseY(), rl.White)
-	}
 	if dedCount > 0 {
 		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
 	}
-	g.tanks.Draw()
+    g.tanks.Draw()
 	if g.showDM {
 		visuals.DrawDMarquee()
 	}
@@ -451,6 +455,13 @@ func main() {
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
+    camera = rl.NewCamera3D(
+        rl.Vector3{X: 0.0, Y: 0.0, Z: 10.0},
+        rl.Vector3{X: 0.0, Y: 0.0, Z: 0.0},
+        rl.Vector3{X: 0.0, Y: 1.0, Z: 0.0},
+        45.0,
+        rl.CameraPerspective,
+    )
 	signalChannel = make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt)
 	// if useANT {
