@@ -11,28 +11,28 @@ import (
 	"time"
 
 	"github.com/MattSwanson/burtbot_overlay/sound"
+	"github.com/MattSwanson/burtbot_overlay/speech"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
 	cubeSize = 3 // X x X
-	// drawSize             = 20 // 80
 	lineSize     float32       = 3.0
 	drawOffsetX                = 150
 	drawOffsetY                = 1100
-	shuffleDelay               = 5      // ms between moves
+	shuffleDelay               = 1     // ms between moves
 	shuffleTime  time.Duration = 100000 // seconds
 )
 
-var drawSize float32 = 20
 var running bool
 var c *cube
 var randoCancelFunc context.CancelFunc
 var cubeLock sync.Mutex = sync.Mutex{}
 var hasShuffled bool
-var moveCount int
+var moveCount uint64
 var currentScore int
 var highScore int
+var drawSize float32 = 20
 
 func init() {
 	j, err := os.ReadFile("cube.json")
@@ -48,7 +48,7 @@ func init() {
 		Right      []byte
 		Top        []byte
 		Bottom     []byte
-		TotalMoves int
+		TotalMoves uint64
 		HighScore  int
 	}{}
 	err = json.Unmarshal(j, &data)
@@ -94,6 +94,8 @@ type cube struct {
 
 func HandleCommand(args []string) {
 	switch args[0] {
+    case "movecount":
+        speech.Speak(fmt.Sprintf("BurtBot has made %d moves on the cube", moveCount), false, false)
 	case "start":
 		start()
 	case "stop":
@@ -248,6 +250,10 @@ func HandleCommand(args []string) {
 
 func GetHighScore() int {
 	return highScore
+}
+
+func GetTotalCubeMoves() uint64 {
+    return moveCount
 }
 
 func resetCube() {
@@ -435,6 +441,10 @@ func stop() {
 	if !running {
 		return
 	}
+    if randoCancelFunc != nil {
+        randoCancelFunc()
+    }
+    randoCancelFunc = nil
 	running = false
 }
 
@@ -444,21 +454,27 @@ func Draw() {
 	}
 
 	for k, v := range c.top {
-		//rl.DrawRectangle(cubeSize*drawSize+drawSize*int32(k%cubeSize), drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
-
-		// we know the bottom 3 need to butt up agains the top of the front face
+        drawPosBaseY := drawOffsetY - drawSize*cubeSize
+        cubeOffset := float32(cubeSize - 1 - k / cubeSize)
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: drawOffsetX + drawSize*float32(k%cubeSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},               // TL
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                               // BL
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)}, // TR
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                      // BR
+			{X: drawOffsetX + drawSize*float32(k%cubeSize) + drawSize/2.0 + cubeOffset *drawSize/2.0, 
+            Y: drawPosBaseY + drawSize*float32(k/cubeSize) + drawSize/2.0 + cubeOffset * drawSize/2.0},               // TL
+
+			{X: drawOffsetX+drawSize*float32(k%cubeSize) + cubeOffset * drawSize/2.0, 
+            Y: drawPosBaseY + drawSize*float32(k/cubeSize) + drawSize + (cubeOffset * drawSize/2.0)},                               // BL
+
+			{X: (drawOffsetX + drawSize * float32(k%cubeSize) + drawSize) + drawSize/2.0 + float32(cubeOffset * drawSize/2.0), 
+            Y: drawPosBaseY + float32(drawSize*float32(k/cubeSize)) + drawSize/2.0 + float32(cubeOffset * drawSize/2.0)}, // TR
+
+			{X: float32(drawOffsetX+drawSize*float32(k%cubeSize)+drawSize) + float32(cubeOffset * drawSize/2.0), 
+            Y: drawPosBaseY + float32(drawSize*float32(k/cubeSize)+drawSize) + float32(cubeOffset * drawSize/2.0)},                      // BR
 		}, getColor(v))
 	}
 	// for k, v := range c.bottom {
 	// 	rl.DrawRectangle(cubeSize*drawSize+drawSize*int32(k%cubeSize), 2*cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
 	// }
 	for k, v := range c.front {
-		rl.DrawRectangle(drawOffsetX+drawSize*int32(k%cubeSize), drawOffsetY+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
+		rl.DrawRectangle(int32(drawOffsetX+drawSize*float32(k%cubeSize)), int32(drawOffsetY+drawSize*float32(k/cubeSize)), int32(drawSize), int32(drawSize), getColor(v))
 	}
 	// for k, v := range c.back {
 	// 	rl.DrawRectangle(3*cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
@@ -469,10 +485,10 @@ func Draw() {
 	for k, v := range c.right {
 		//rl.DrawRectangle(2*cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - float32(int32(k%cubeSize)*drawSize/2.0)},                               // TL
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)+drawSize) - float32(int32(k%cubeSize)*drawSize/2.0)},                      // BL
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // TR
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) + drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // BR
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)) - float32(float32(k%cubeSize)*drawSize/2.0)},                               // TL
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)+drawSize) - float32(float32(k%cubeSize)*drawSize/2.0)},                      // BL
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)) - drawSize/2.0 - float32(float32(k%cubeSize)*drawSize/2.0)}, // TR
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)) + drawSize/2.0 - float32(float32(k%cubeSize)*drawSize/2.0)}, // BR
 		}, getColor(v))
 	}
 
@@ -509,9 +525,7 @@ func Draw() {
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY - drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize, Y: drawOffsetY - drawSize}, lineSize, rl.Black)
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize/2, Y: drawOffsetY - drawSize/2}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize/2, Y: drawOffsetY - drawSize/2}, lineSize, rl.Black)
 
-	rl.DrawText(fmt.Sprintf("Score: %d", currentScore), drawOffsetX, drawOffsetY-50, 16, rl.Orange)
-	rl.DrawText(fmt.Sprintf("Moves: %d", moveCount), drawOffsetX, drawOffsetY+100, 16, rl.Orange)
-	rl.DrawText(fmt.Sprintf("High: %d", highScore), drawOffsetX, drawOffsetY+75, 16, rl.Orange)
+	rl.DrawText(fmt.Sprintf("Moves: %d", moveCount), drawOffsetX, drawOffsetY-50, 18, rl.Orange)
 }
 
 func getColor(b byte) rl.Color {
@@ -544,8 +558,10 @@ func shuffle() {
 		for {
 			select {
 			case <-ctx.Done():
+                cubeLock.Unlock()
 				return
 			default:
+                drawSize = 20
 				r := rand.Intn(7)
 				switch r {
 				case 0:
@@ -568,29 +584,30 @@ func shuffle() {
 				if currentScore > highScore {
 					highScore = currentScore
 				}
-				var timeToWait time.Duration = shuffleDelay
+				var timeToWait time.Duration = 0
 				if currentScore == 48 {
+                    drawSize = 80
 					fmt.Println("OMG IT DEIFN THSK WHOW")
 					hasShuffled = true
 					cubeLock.Unlock()
 					return
 				}
-				drawSize = 20
-				if currentScore == 36 || currentScore == 24 || currentScore == 26 {
+				if currentScore == 36 {
+                    drawSize = 80
 					sound.Play("sosumi")
-					drawSize = 80
-					timeToWait = 10000
+					timeToWait = 10000000000
+				    time.Sleep(timeToWait * time.Nanosecond)
 				}
-				time.Sleep(timeToWait * time.Millisecond)
+				//time.Sleep(timeToWait * time.Nanosecond)
 			}
 		}
 	}(c)
+
 	go func() {
 		time.Sleep(shuffleTime * time.Second)
 		randoCancelFunc()
 		randoCancelFunc = nil
 		hasShuffled = true
-		cubeLock.Unlock()
 	}()
 }
 
@@ -605,7 +622,7 @@ func SaveCube() {
 		Right      []byte
 		Top        []byte
 		Bottom     []byte
-		TotalMoves int
+		TotalMoves uint64
 		HighScore  int
 	}{
 		Front:      c.front,
