@@ -65,6 +65,14 @@ func NewGame(w, h int) *Core {
 	}
 }
 
+func (c *Core) Update(delta float64) {
+
+}
+
+func (c *Core) Cleanup() {
+
+}
+
 func (c *Core) HandleMessage(args []string) {
 	if args[0] == "start" && !c.running {
 		c.LoadPuzzle(0)

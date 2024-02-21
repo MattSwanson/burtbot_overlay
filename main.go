@@ -20,10 +20,8 @@ import (
 	"strings"
 	"time"
 
+    "github.com/MattSwanson/burtbot_overlay/games"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
-	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
-	"github.com/MattSwanson/burtbot_overlay/games/plinko"
-	"github.com/MattSwanson/burtbot_overlay/games/tanks"
     "github.com/MattSwanson/burtbot_overlay/planes"
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
@@ -114,9 +112,6 @@ type Game struct {
 	staticLayer     static
 	gameRunning     bool
 	snakeGame       *Snake
-	plinko          *plinko.Core
-	tanks           *tanks.Core
-	lightsout       *lightsout.Core
 	currentInput    int
 	bigMouse        bool
 	bigMouseImg     rl.Texture2D
@@ -144,12 +139,9 @@ const (
 	MarqueeCmd
 	SingleMarqueeCmd
 	TTS
-	PlinkoCmd
-	TanksCmd
 	BopCmd
 	MiracleCmd
 	MKCmd
-	LightsOutCmd
 	BingoCmd
 	LightsCmd
 	ErrorCmd
@@ -169,6 +161,7 @@ const (
 	MetricsCmd
 	RaidAlert
 	SteamCmd
+    GameCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -250,14 +243,8 @@ func (g *Game) Update() {
 			cache, _ := strconv.ParseBool(key.args[1])
             randomVoice, _ := strconv.ParseBool(key.args[2])
 			go speech.Speak(key.args[0], cache, randomVoice)
-		case PlinkoCmd:
-			g.plinko.HandleMessage(key.args)
-		case TanksCmd:
-			g.tanks.HandleMessage(key.args)
 		case BopCmd:
 			g.bopometer.HandleMessage(key.args)
-		case LightsOutCmd:
-			g.lightsout.HandleMessage(key.args)
 		case BingoCmd:
 			g.bingoOverlay.HandleMessage(key.args)
 		case MiracleCmd:
@@ -348,6 +335,8 @@ func (g *Game) Update() {
 			g.raidAlert()
 		case SteamCmd:
 			visuals.NewSteam().GetRandomGame()
+        case GameCmd:
+            games.HandleMessage(key.args)
 		}
 	default:
 	}
@@ -355,7 +344,7 @@ func (g *Game) Update() {
 		g.snakeGame.Update(g.currentInput)
 		g.currentInput = 0
 	}
-	g.plinko.Update()
+    games.Update(delta)
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
@@ -364,7 +353,6 @@ func (g *Game) Update() {
 	if g.showDM {
 		visuals.UpdateDMarquee(delta)
 	}
-	g.tanks.Update(delta)
 	if g.errorManager.Visible {
 		g.errorManager.Update(delta)
 	}
@@ -384,7 +372,7 @@ func (g *Game) Update() {
 func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
-    rl.DrawPixel(0,0,rl.Black)
+    rl.DrawPixel(0,0,rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
     rl.BeginMode3D(camera)
     if showtux {
         rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
@@ -398,11 +386,10 @@ func (g *Game) Draw() {
 	if dedCount > 0 {
 		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
 	}
-    g.tanks.Draw()
+    games.Draw()
 	if g.showDM {
 		visuals.DrawDMarquee()
 	}
-	g.lightsout.Draw()
 
 	if g.gameRunning {
 		g.snakeGame.Draw()
@@ -413,7 +400,6 @@ func (g *Game) Draw() {
 	// if g.showStatic {
 	// 	g.staticLayer.Draw(screen)
 	// }
-	g.plinko.Draw()
 	g.bopometer.Draw()
 	cube.Draw()
 	visuals.DrawDrops()
@@ -517,13 +503,10 @@ func main() {
 			go handleConnection(conn, c, wc)
 		}
 	}(game.commChannel, ga.connWriteChan)
-	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan)
-	defer game.plinko.CancelTimer()
-	//game.plinkoRunning = true
+    games.Load(screenWidth, screenHeight, game.connWriteChan)
+    defer games.Cleanup()
 	game.snakeGame = newSnake()
-	game.tanks = tanks.Load(screenWidth, screenHeight)
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
-	game.lightsout = lightsout.NewGame(5, 5)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
 	/*if err := visuals.PollFS(); err != nil {
@@ -634,12 +617,12 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{PlinkoCmd, fields[1:]}
+			c <- cmd{GameCmd, fields}
 		case "tanks":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{TanksCmd, fields[1:]}
+			c <- cmd{GameCmd, fields}
 		case "bop":
 			if len(fields) < 2 {
 				continue
@@ -653,7 +636,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{LightsOutCmd, fields[1:]}
+            c <- cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)} //hacky
 		case "bingo":
 			if len(fields) < 2 {
 				continue
@@ -812,6 +795,7 @@ func startStream() bool {
 	return true
 }
 
+//TODO: update to not use flatpak to launch obs
 func stopStream() {
 	if obsCmd == nil {
 		return

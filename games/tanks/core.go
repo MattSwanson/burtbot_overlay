@@ -55,12 +55,12 @@ func (c *Core) removeTankFromTurnOrder(t *tank) {
 	c.turnOrder = tanks
 }
 
-func Load(sWidth, sHeight int) *Core {
+func Load(sWidth, sHeight float64) *Core {
 
 	boomImg = rl.LoadTexture("./images/tanks/tanks_boom.png")
 
 	tanks := []*tank{}
-	terrain, heightMap := generateTerrain(sWidth, sHeight)
+	terrain, heightMap := generateTerrain(int(sWidth), int(sHeight))
 
 	w := (rand.Float64() - 0.5) * 100
 	return &Core{
@@ -68,8 +68,8 @@ func Load(sWidth, sHeight int) *Core {
 		terrainImg:   terrain,
 		heightMap:    heightMap,
 		wind:         w,
-		screenWidth:  sWidth,
-		screenHeight: sHeight,
+		screenWidth:  int(sWidth),
+		screenHeight: int(sHeight),
 	}
 }
 
@@ -151,12 +151,12 @@ func (c *Core) HandleMessage(args []string) {
 	}
 }
 
-func (c *Core) Update(delta float64) error {
+func (c *Core) Update(delta float64){
 	if !c.running {
-		return nil
+		return
 	}
 	if c.projectile == nil {
-		return nil
+		return
 	}
 
 	for v, tank := range c.tanks {
@@ -192,7 +192,7 @@ func (c *Core) Update(delta float64) error {
 						c.gameOver = false
 					}()
 					c.Reset()
-					return nil
+					return
 				} else {
 					sound.Play("sosumi")
 				}
@@ -203,7 +203,7 @@ func (c *Core) Update(delta float64) error {
 				} else {
 					c.removeTankFromTurnOrder(tank)
 				}
-				return nil
+				return
 			}
 		}
 	}
@@ -213,7 +213,7 @@ func (c *Core) Update(delta float64) error {
 		c.projectile = nil
 		// c.advanceTurn(-1)
 		c.turnOrder = rotateTurns(c.turnOrder)
-		return nil
+		return
 	}
 
 	// ground collision
@@ -232,13 +232,13 @@ func (c *Core) Update(delta float64) error {
 			c.projectile = nil
 			//c.advanceTurn(-1)
 			c.turnOrder = rotateTurns(c.turnOrder)
-			return nil
+			return
 		}
 	}
 
 	c.projectile.Update(delta)
 
-	return nil
+	return
 }
 
 func (c *Core) Reset() {
@@ -338,6 +338,10 @@ func (c *Core) Begin() {
 		c.PlaceTank(i, xpos)
 	}
 	c.gameStarted = true
+}
+
+func (c *Core) Cleanup() {
+
 }
 
 func removeTank(tanks []*tank, i int) []*tank {

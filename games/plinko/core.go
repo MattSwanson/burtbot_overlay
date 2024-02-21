@@ -339,7 +339,7 @@ func removeBall(s []*token, i int) []*token {
 	return s[:len(s)-1]
 }
 
-func (c *Core) Update() error {
+func (c *Core) Update(d float64) {
 	select {
 	case <-timerChannel:
 		for i := 0; i < len(c.queues); i++ {
@@ -361,8 +361,6 @@ func (c *Core) Update() error {
 	}
 	c.CheckForCollision(delta)
 	c.lastUpdate = time.Now()
-
-	return nil
 }
 
 func (c *Core) HandleMessage(args []string) {
@@ -526,4 +524,8 @@ func generateBarriers(n int) []*barrier {
 	}
 
 	return barriers
+}
+
+func (c *Core) Cleanup() {
+    c.CancelTimer()
 }
