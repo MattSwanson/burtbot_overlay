@@ -81,8 +81,8 @@ func init() {
 }
 
 func LoadMarqueeFonts() {
-	marqueeFont = rl.LoadFontEx("caskaydia.TTF", marqueeTextSize, nil, 0)
-	xlMarqueeFont = rl.LoadFontEx("caskaydia.TTF", xlMarqueeTextSize, nil, 0)
+	marqueeFont = rl.LoadFontEx("caskaydia.TTF", marqueeTextSize, nil)
+	xlMarqueeFont = rl.LoadFontEx("caskaydia.TTF", xlMarqueeTextSize, nil)
 }
 
 func createBaseMarquee() *Marquee {

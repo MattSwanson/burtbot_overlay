@@ -44,6 +44,8 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/MattSwanson/raylib-go v0.0.8 h1:j27YcYq6a4nkXBkCDxaK6Cxb0s6SN82XWAiG1TLMRO8=
 github.com/MattSwanson/raylib-go v0.0.8/go.mod h1:HYEV16sSb06aZpEdgHMzoefktz2wjcKwvujh4CCrbsk=
+github.com/MattSwanson/raylib-go v0.0.10 h1:vKYe1ltn13vh5XbH8FHSbz/owmo2FX02lzZUVF6YmOY=
+github.com/MattSwanson/raylib-go v0.0.10/go.mod h1:HYEV16sSb06aZpEdgHMzoefktz2wjcKwvujh4CCrbsk=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=

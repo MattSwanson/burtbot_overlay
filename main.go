@@ -48,6 +48,7 @@ var nowPlaying string
 var npTextY float32
 var npBGY int32
 var goodFont rl.Font
+var ibmFont rl.Font
 var moos = []string{
 	"moo_a1",
 	"moo_a2",
@@ -297,6 +298,9 @@ func (g *Game) Update() {
 			if key.args[0] == "off" {
 				nowPlaying = ""
 			} else {
+                cps := getCodePointsFromString("Now Playing: " + key.args[0])
+                fmt.Println(cps)
+                ibmFont = rl.LoadFontEx("IBMPlexSansJP-Regular.otf", 48, cps)
 				nowPlaying = key.args[0]
 			}
 		case NpTextCmd:
@@ -423,7 +427,7 @@ func (g *Game) Draw() {
 
 	if nowPlaying != "" {
 		rl.DrawRectangle(0, npBGY, 2560, 75, rl.Color{R: 0, G: 0, B: 0, A: 192})
-		rl.DrawTextEx(goodFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
+        rl.DrawTextEx(ibmFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
 	}
 
 	rl.EndDrawing()
@@ -471,7 +475,8 @@ func main() {
 	game := &ga
 	game.bigMouseImg = sprites[2]
 	visuals.LoadMarqueeFonts()
-	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil, 0)
+	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil)
+    ibmFont = rl.LoadFontEx("IBMPlexMono-Regular.ttf", 48, nil)
 	npTextY = npTextBottomY
 	npBGY = int32(npTextY - 10)
 	ln, err := net.Listen("tcp", listenAddr)
@@ -817,6 +822,14 @@ func goProConnected(w http.ResponseWriter, r *http.Request) {
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro disconnected", true, false)
 	fmt.Fprintf(w, "go it\n")
+}
+
+func getCodePointsFromString(s string) []rune {
+    codePoints := []rune{}
+    for _, r := range s {
+        codePoints = append(codePoints, r)
+    }
+    return codePoints
 }
 
 // perform any necessary cleanup here. should be called on

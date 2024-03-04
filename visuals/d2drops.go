@@ -41,7 +41,7 @@ var textColors = map[string]rl.Color{
 }
 
 func LoadDropsAssets() {
-	dropFont = rl.LoadFontEx("./visuals/Exocet2.ttf", dropTextSize, nil, 0)
+	dropFont = rl.LoadFontEx("./visuals/Exocet2.ttf", dropTextSize, nil)
 }
 
 func ShowDrops(j string) {
