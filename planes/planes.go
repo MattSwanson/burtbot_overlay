@@ -137,11 +137,13 @@ func CheckForPlanes() {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Println("Couldn't reach tar1090 server", err.Error())
+        return
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&respStruct)
 	if err != nil {
 		fmt.Println("Error decoding response from tar1090 server", err.Error())
+        return
 	}
 
     for _, plane := range respStruct.Aircraft {
