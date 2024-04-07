@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+    "encoding/xml"
 	"flag"
 	"fmt"
 	"image/color"
@@ -20,6 +21,9 @@ import (
 	"strings"
 	"time"
 
+    "github.com/andreykaipov/goobs"
+    "github.com/andreykaipov/goobs/api/requests/scenes"
+    "github.com/andreykaipov/goobs/api/requests/sceneitems"
     "github.com/MattSwanson/burtbot_overlay/games"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
     "github.com/MattSwanson/burtbot_overlay/planes"
@@ -84,6 +88,14 @@ const (
 	npTextTopY    = 10
 	npTextBottomY = 1375
 )
+
+var goobsClient *goobs.Client
+var streamHealthCancelFunc context.CancelFunc;
+type RTMPApplication struct {
+    Name string `xml:"name"`
+    BitRate int `xml:"live>stream>bw_video"`
+    Publishing []bool `xml:"live>stream>publishing"`
+}
 
 func init() {
 	flag.BoolVar(&useANT, "a", false, "enable ANT sensor")
@@ -327,7 +339,9 @@ func (g *Game) Update() {
 				startStream()
 			} else if key.args[0] == "stop" {
 				stopStream()
-			}
+            } else if key.args[0] == "flip" {
+               flipStreamCamera() 
+            }
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
 				visuals.EnableMetrics(true)
@@ -438,7 +452,7 @@ func main() {
 
 	http.HandleFunc("/go_pro_start", goProConnected)
 	http.HandleFunc("/go_pro_stop", goProDisconnected)
-	go http.ListenAndServe(":8082", nil)
+	go http.ListenAndServe(":8083", nil)
 	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
@@ -517,6 +531,15 @@ func main() {
 	/*if err := visuals.PollFS(); err != nil {
 		fmt.Println("Couldn't connect to sim")
 	}*/
+
+    goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
+    if err != nil {
+        log.Println("Couldn't connect to OBSWS - ", err.Error())
+    }
+    if goobsClient != nil {
+        fmt.Println("Connected to OBSWS interface")
+        defer goobsClient.Disconnect()
+    }
 
     go func(){
         for true {
@@ -790,7 +813,7 @@ func startStream() bool {
 		return false
 	}
 	fmt.Println("attempting stream start")
-	cmd := exec.Command("flatpak", "run", "com.obsproject.Studio", "--startstreaming")
+    cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
 	if err := cmd.Start(); err != nil {
 		log.Println(err)
 		return false
@@ -800,28 +823,138 @@ func startStream() bool {
 	return true
 }
 
-//TODO: update to not use flatpak to launch obs
 func stopStream() {
 	if obsCmd == nil {
-		return
-	}
-	cmd := exec.Command("flatpak", "kill", "com.obsproject.Studio")
-	if err := cmd.Start(); err != nil {
-		log.Println(err)
 		return
 	}
 	obsCmd.Process.Kill()
 	obsCmd = nil
 }
 
+// TODO - Need to account for the scenario where the overlay closes
+// mid stream. As of now, the only way to pick back up the stream
+// health checks would be for the go pro stream to restart to 
+// trigger this event.  Maybe on overlay start, do one health check
+// and if we find a publisher, call this function manually??
 func goProConnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro connected", true, false)
+    if goobsClient != nil {
+        params := scenes.NewSetCurrentProgramSceneParams().
+            WithSceneName("outdoors")
+        goobsClient.Scenes.SetCurrentProgramScene(params)
+    }
+    if streamHealthCancelFunc != nil {
+        // if we already have a health check running and
+        // it didn't close properly, don't start another
+        fmt.Fprintf(w, "got it\n")
+        return
+    }
+    ctx, cancelFunc := context.WithCancel(context.Background())
+    streamHealthCancelFunc = cancelFunc
+    go func(ctx context.Context) {
+        fmt.Println("starting health check llooolp")
+        ticker := time.NewTicker(time.Second * 3)
+        defer ticker.Stop()
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-ticker.C:
+                fmt.Println("tick")
+                checkGoProStreamHealth()
+            }
+        }
+    }(ctx)
 	fmt.Fprintf(w, "got it\n")
 }
 
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro disconnected", true, false)
+    if streamHealthCancelFunc != nil {
+        // Clean up any stream health checks
+        params := scenes.NewSetCurrentProgramSceneParams().
+            WithSceneName("no_signal")
+        goobsClient.Scenes.SetCurrentProgramScene(params)
+        streamHealthCancelFunc()
+    }
 	fmt.Fprintf(w, "go it\n")
+}
+
+func checkGoProStreamHealth() {
+    respStruct := struct {
+        Apps []RTMPApplication `xml:"server>application"`         
+    }{}
+
+    req, err := http.NewRequest("GET", "http://192.168.0.29:8080/stat", nil)
+    if err != nil {
+        log.Println("Error getting stream health update", err.Error())
+        return
+    }
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        log.Println("Error getting stream health", err.Error())
+        return
+    }
+
+    err = xml.NewDecoder(resp.Body).Decode(&respStruct)
+    if err != nil {
+        fmt.Println("Err parsing resp body xml health", err.Error())
+        return
+    }
+
+    fmt.Println("steam heltj chekc sone")
+    // Check to see if we have any active streams
+    // If not, change scene to our lost signal stream
+    // we can check for application outdoor having a client with state: publishing
+    for _, app := range respStruct.Apps {
+        if app.Name == "outdoor" {
+            if len(app.Publishing) == 0 {
+                // No publishing - lost signal
+                // should be covered by go pro disc event?
+                fmt.Println("No stream publisher found - ??")
+                continue
+            }
+            if app.BitRate < 1800000 {
+                //Low bitrate - maybe change scenes
+                // or show low bitrate warning, see what we can
+                // do over websocket
+                fmt.Println("---- Stream below bitrate threshold -----", app.BitRate)
+            }
+            fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
+        }
+    }
+}
+
+func flipStreamCamera() {
+    
+    /*prams := sceneitems.NewGetSceneItemListParams().
+        WithSceneName("outdoors")
+    r, err := goobsClient.SceneItems.GetSceneItemList(prams)
+    if err != nil {
+        fmt.Println("error getting scene item list", err.Error())
+        return
+    }
+    for _, v := range r.SceneItems {
+        fmt.Printf("Scene ID: %d - Source Name: %s\n", v.SceneItemID, v.SourceName)
+    }*/
+    gsitParams := sceneitems.NewGetSceneItemTransformParams().
+        WithSceneName("outdoors").
+        WithSceneItemId(1)
+    gsitResp, err := goobsClient.SceneItems.GetSceneItemTransform(gsitParams)
+    if err != nil {
+        fmt.Println("Error getting transform ", err.Error())
+        return
+    }
+    newTransform := gsitResp.SceneItemTransform
+    newTransform.Rotation = float64(int(newTransform.Rotation + 180) % 360)
+    params := sceneitems.NewSetSceneItemTransformParams().
+        WithSceneName("outdoors").
+        WithSceneItemId(1).
+        WithSceneItemTransform(newTransform)
+    _, err := goobsClient.SceneItems.SetSceneItemTransform(params)
+    if err != nil {
+        fmt.Println("Error setting transform ", err.Error())
+    }
 }
 
 func getCodePointsFromString(s string) []rune {
@@ -841,6 +974,9 @@ func cleanUp() {
 	// }
 	// rl.CloseAudioDevice()
 	// rl.CloseWindow()
+    if streamHealthCancelFunc != nil {
+        streamHealthCancelFunc()
+    }
     fmt.Println("save the cube!")
     cube.SaveCube()
     os.Exit(0)
