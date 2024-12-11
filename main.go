@@ -5,7 +5,7 @@ package main
 
 import (
 	"bufio"
-    "encoding/xml"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"image/color"
@@ -16,21 +16,21 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-    "os/signal"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
-    "github.com/andreykaipov/goobs"
-    "github.com/andreykaipov/goobs/api/requests/scenes"
-    "github.com/andreykaipov/goobs/api/requests/sceneitems"
-    "github.com/MattSwanson/burtbot_overlay/games"
+	"github.com/MattSwanson/burtbot_overlay/games"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
-    "github.com/MattSwanson/burtbot_overlay/planes"
+	"github.com/MattSwanson/burtbot_overlay/planes"
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
 	"github.com/MattSwanson/burtbot_overlay/speech"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
+	"github.com/andreykaipov/goobs"
+	"github.com/andreykaipov/goobs/api/requests/sceneitems"
+	"github.com/andreykaipov/goobs/api/requests/scenes"
 	"golang.org/x/net/context"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -91,11 +91,12 @@ const (
 )
 
 var goobsClient *goobs.Client
-var streamHealthCancelFunc context.CancelFunc;
+var streamHealthCancelFunc context.CancelFunc
+
 type RTMPApplication struct {
-    Name string `xml:"name"`
-    BitRate int `xml:"live>stream>bw_video"`
-    Publishing []bool `xml:"live>stream>publishing"`
+	Name       string `xml:"name"`
+	BitRate    int    `xml:"live>stream>bw_video"`
+	Publishing []bool `xml:"live>stream>publishing"`
 }
 
 func init() {
@@ -120,24 +121,24 @@ func init() {
 }
 
 type Game struct {
-	sprites         Sprites
-	commChannel     chan cmd
-	connWriteChan   chan string
-	showStatic      bool
-	staticLayer     static
-	gameRunning     bool
-	snakeGame       *Snake
-	currentInput    int
-	bigMouse        bool
-	bigMouseImg     rl.Texture2D
-	bopometer       *visuals.Bopometer
-	bingoOverlay    *visuals.BingoOverlay
-	lastUpdate      time.Time
-	showWhip        bool
-	showMK          bool
-	showDM          bool
-	showFSInfo      bool
-	errorManager    *visuals.ErrorManager
+	sprites       Sprites
+	commChannel   chan cmd
+	connWriteChan chan string
+	showStatic    bool
+	staticLayer   static
+	gameRunning   bool
+	snakeGame     *Snake
+	currentInput  int
+	bigMouse      bool
+	bigMouseImg   rl.Texture2D
+	bopometer     *visuals.Bopometer
+	bingoOverlay  *visuals.BingoOverlay
+	lastUpdate    time.Time
+	showWhip      bool
+	showMK        bool
+	showDM        bool
+	showFSInfo    bool
+	errorManager  *visuals.ErrorManager
 }
 
 type cmd struct {
@@ -176,7 +177,7 @@ const (
 	MetricsCmd
 	RaidAlert
 	SteamCmd
-    GameCmd
+	GameCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -248,7 +249,7 @@ func (g *Game) Update() {
 			}
 		case MarqueeCmd:
 			if key.args[0] == "off" {
-                visuals.DisableMarquees()
+				visuals.DisableMarquees()
 				break
 			}
 			visuals.NewMarquee(key.args[0], float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
@@ -256,7 +257,7 @@ func (g *Game) Update() {
 			visuals.NewMarquee(key.args[0], float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
 		case TTS:
 			cache, _ := strconv.ParseBool(key.args[1])
-            randomVoice, _ := strconv.ParseBool(key.args[2])
+			randomVoice, _ := strconv.ParseBool(key.args[2])
 			go speech.Speak(key.args[0], cache, randomVoice)
 		case BopCmd:
 			g.bopometer.HandleMessage(key.args)
@@ -312,9 +313,9 @@ func (g *Game) Update() {
 			if key.args[0] == "off" {
 				nowPlaying = ""
 			} else {
-                cps := getCodePointsFromString("Now Playing: " + key.args[0])
-                fmt.Println(cps)
-                ibmFont = rl.LoadFontEx("IBMPlexSansJP-Regular.otf", 48, cps)
+				cps := getCodePointsFromString("Now Playing: " + key.args[0])
+				fmt.Println(cps)
+				ibmFont = rl.LoadFontEx("IBMPlexSansJP-Regular.otf", 48, cps)
 				nowPlaying = key.args[0]
 			}
 		case NpTextCmd:
@@ -335,15 +336,15 @@ func (g *Game) Update() {
 		case ToggleFSInfoCmd:
 			g.showFSInfo = !g.showFSInfo
 		case FSCmd:
-			//visuals.HandleFSCmd(key.args)
+			visuals.HandleFSCmd(key.args)
 		case StreamCmd:
 			if key.args[0] == "start" {
 				startStream()
 			} else if key.args[0] == "stop" {
 				stopStream()
-            } else if key.args[0] == "flip" {
-               flipStreamCamera() 
-            }
+			} else if key.args[0] == "flip" {
+				flipStreamCamera()
+			}
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
 				visuals.EnableMetrics(true)
@@ -355,8 +356,8 @@ func (g *Game) Update() {
 			g.raidAlert()
 		case SteamCmd:
 			visuals.NewSteam().GetRandomGame()
-        case GameCmd:
-            games.HandleMessage(key.args)
+		case GameCmd:
+			games.HandleMessage(key.args)
 		}
 	default:
 	}
@@ -364,12 +365,12 @@ func (g *Game) Update() {
 		g.snakeGame.Update(g.currentInput)
 		g.currentInput = 0
 	}
-    games.Update(delta)
+	games.Update(delta)
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
 	g.bopometer.Update(delta)
-    visuals.UpdateMarquees(delta)
+	visuals.UpdateMarquees(delta)
 	if g.showDM {
 		visuals.UpdateDMarquee(delta)
 	}
@@ -392,21 +393,21 @@ func (g *Game) Update() {
 func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
-    rl.DrawPixel(0,0,rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
-    rl.BeginMode3D(camera)
-    if showtux {
-        rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
-    }
-    rl.EndMode3D()
+	rl.DrawPixel(0, 0, rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
+	rl.BeginMode3D(camera)
+	if showtux {
+		rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
+	}
+	rl.EndMode3D()
 
-//	rl.DrawFPS(50, 50)
+	//	rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
 
 	if dedCount > 0 {
 		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
 	}
-    games.Draw()
+	games.Draw()
 	if g.showDM {
 		visuals.DrawDMarquee()
 	}
@@ -424,10 +425,12 @@ func (g *Game) Draw() {
 	cube.Draw()
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
-	//visuals.DrawFSInfo(g.showFSInfo)
+	if g.showFSInfo {
+		visuals.DrawFSInfo()
+	}
 	visuals.DrawSteamOverlay()
 
-    visuals.DrawMarquees()
+	visuals.DrawMarquees()
 
 	if g.showWhip {
 		rl.DrawTextureEx(mwhipImg, rl.Vector2{X: 560, Y: 0}, 0, 0.6, rl.White)
@@ -443,7 +446,7 @@ func (g *Game) Draw() {
 
 	if nowPlaying != "" {
 		rl.DrawRectangle(0, npBGY, 2560, 75, rl.Color{R: 0, G: 0, B: 0, A: 192})
-        rl.DrawTextEx(ibmFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
+		rl.DrawTextEx(ibmFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
 	}
 
 	rl.EndDrawing()
@@ -461,13 +464,13 @@ func main() {
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
-    camera = rl.NewCamera3D(
-        rl.Vector3{X: 0.0, Y: 0.0, Z: 10.0},
-        rl.Vector3{X: 0.0, Y: 0.0, Z: 0.0},
-        rl.Vector3{X: 0.0, Y: 1.0, Z: 0.0},
-        45.0,
-        rl.CameraPerspective,
-    )
+	camera = rl.NewCamera3D(
+		rl.Vector3{X: 0.0, Y: 0.0, Z: 10.0},
+		rl.Vector3{X: 0.0, Y: 0.0, Z: 0.0},
+		rl.Vector3{X: 0.0, Y: 1.0, Z: 0.0},
+		45.0,
+		rl.CameraPerspective,
+	)
 	signalChannel = make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt)
 	// if useANT {
@@ -484,7 +487,7 @@ func main() {
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	visuals.LoadDropsAssets()
-	//visuals.LoadFSAssets()
+	visuals.LoadFSAssets()
 	visuals.InitMetrics()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
@@ -492,7 +495,7 @@ func main() {
 	game.bigMouseImg = sprites[2]
 	visuals.LoadMarqueeFonts()
 	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil)
-    ibmFont = rl.LoadFontEx("IBMPlexMono-Regular.ttf", 48, nil)
+	ibmFont = rl.LoadFontEx("IBMPlexMono-Regular.ttf", 48, nil)
 	npTextY = npTextBottomY
 	npBGY = int32(npTextY - 10)
 	ln, err := net.Listen("tcp", listenAddr)
@@ -517,31 +520,31 @@ func main() {
 				}
 			}
 			if !acceptedHost {
-				go speech.Speak("Intrusion Detected", true, false)
+				//go speech.Speak("Intrusion Detected", true, false)
 				conn.Close()
 				continue
 			}
 			go handleConnection(conn, c, wc)
 		}
 	}(game.commChannel, ga.connWriteChan)
-    games.Load(screenWidth, screenHeight, game.connWriteChan)
-    defer games.Cleanup()
+	games.Load(screenWidth, screenHeight, game.connWriteChan)
+	defer games.Cleanup()
 	game.snakeGame = newSnake()
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
-	/*if err := visuals.PollFS(); err != nil {
+	if err := visuals.PollFS(); err != nil {
 		fmt.Println("Couldn't connect to sim")
-	}*/
+	}
 
-    goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
-    if err != nil {
-        log.Println("Couldn't connect to OBSWS - ", err.Error())
-    }
-    if goobsClient != nil {
-        fmt.Println("Connected to OBSWS interface")
-        defer goobsClient.Disconnect()
-    }
+	goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
+	if err != nil {
+		log.Println("Couldn't connect to OBSWS - ", err.Error())
+	}
+	if goobsClient != nil {
+		fmt.Println("Connected to OBSWS interface")
+		defer goobsClient.Disconnect()
+	}
 
 	if showPlanes {
 		fmt.Println("I've been asked to show planes")
@@ -670,7 +673,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			if len(fields) < 2 {
 				continue
 			}
-            c <- cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)} //hacky
+			c <- cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)} //hacky
 		case "bingo":
 			if len(fields) < 2 {
 				continue
@@ -819,7 +822,7 @@ func startStream() bool {
 		return false
 	}
 	fmt.Println("attempting stream start")
-    cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
+	cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
 	if err := cmd.Start(); err != nil {
 		log.Println(err)
 		return false
@@ -839,136 +842,136 @@ func stopStream() {
 
 // TODO - Need to account for the scenario where the overlay closes
 // mid stream. As of now, the only way to pick back up the stream
-// health checks would be for the go pro stream to restart to 
+// health checks would be for the go pro stream to restart to
 // trigger this event.  Maybe on overlay start, do one health check
 // and if we find a publisher, call this function manually??
 func goProConnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro connected", true, false)
-    if goobsClient != nil {
-        params := scenes.NewSetCurrentProgramSceneParams().
-            WithSceneName("outdoors")
-        goobsClient.Scenes.SetCurrentProgramScene(params)
-    }
-    if streamHealthCancelFunc != nil {
-        // if we already have a health check running and
-        // it didn't close properly, don't start another
-        fmt.Fprintf(w, "got it\n")
-        return
-    }
-    ctx, cancelFunc := context.WithCancel(context.Background())
-    streamHealthCancelFunc = cancelFunc
-    go func(ctx context.Context) {
-        fmt.Println("starting health check llooolp")
-        ticker := time.NewTicker(time.Second * 3)
-        defer ticker.Stop()
-        for {
-            select {
-            case <-ctx.Done():
-                return
-            case <-ticker.C:
-                fmt.Println("tick")
-                checkGoProStreamHealth()
-            }
-        }
-    }(ctx)
+	if goobsClient != nil {
+		params := scenes.NewSetCurrentProgramSceneParams().
+			WithSceneName("outdoors")
+		goobsClient.Scenes.SetCurrentProgramScene(params)
+	}
+	if streamHealthCancelFunc != nil {
+		// if we already have a health check running and
+		// it didn't close properly, don't start another
+		fmt.Fprintf(w, "got it\n")
+		return
+	}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	streamHealthCancelFunc = cancelFunc
+	go func(ctx context.Context) {
+		fmt.Println("starting health check llooolp")
+		ticker := time.NewTicker(time.Second * 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fmt.Println("tick")
+				checkGoProStreamHealth()
+			}
+		}
+	}(ctx)
 	fmt.Fprintf(w, "got it\n")
 }
 
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro disconnected", true, false)
-    if streamHealthCancelFunc != nil {
-        // Clean up any stream health checks
-        params := scenes.NewSetCurrentProgramSceneParams().
-            WithSceneName("no_signal")
-        goobsClient.Scenes.SetCurrentProgramScene(params)
-        streamHealthCancelFunc()
-    }
+	if streamHealthCancelFunc != nil {
+		// Clean up any stream health checks
+		params := scenes.NewSetCurrentProgramSceneParams().
+			WithSceneName("no_signal")
+		goobsClient.Scenes.SetCurrentProgramScene(params)
+		streamHealthCancelFunc()
+	}
 	fmt.Fprintf(w, "go it\n")
 }
 
 func checkGoProStreamHealth() {
-    respStruct := struct {
-        Apps []RTMPApplication `xml:"server>application"`         
-    }{}
+	respStruct := struct {
+		Apps []RTMPApplication `xml:"server>application"`
+	}{}
 
-    req, err := http.NewRequest("GET", "http://192.168.0.29:8080/stat", nil)
-    if err != nil {
-        log.Println("Error getting stream health update", err.Error())
-        return
-    }
-    resp, err := http.DefaultClient.Do(req)
-    if err != nil {
-        log.Println("Error getting stream health", err.Error())
-        return
-    }
+	req, err := http.NewRequest("GET", "http://192.168.0.29:8080/stat", nil)
+	if err != nil {
+		log.Println("Error getting stream health update", err.Error())
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("Error getting stream health", err.Error())
+		return
+	}
 
-    err = xml.NewDecoder(resp.Body).Decode(&respStruct)
-    if err != nil {
-        fmt.Println("Err parsing resp body xml health", err.Error())
-        return
-    }
+	err = xml.NewDecoder(resp.Body).Decode(&respStruct)
+	if err != nil {
+		fmt.Println("Err parsing resp body xml health", err.Error())
+		return
+	}
 
-    fmt.Println("steam heltj chekc sone")
-    // Check to see if we have any active streams
-    // If not, change scene to our lost signal stream
-    // we can check for application outdoor having a client with state: publishing
-    for _, app := range respStruct.Apps {
-        if app.Name == "outdoor" {
-            if len(app.Publishing) == 0 {
-                // No publishing - lost signal
-                // should be covered by go pro disc event?
-                fmt.Println("No stream publisher found - ??")
-                continue
-            }
-            if app.BitRate < 1800000 {
-                //Low bitrate - maybe change scenes
-                // or show low bitrate warning, see what we can
-                // do over websocket
-                fmt.Println("---- Stream below bitrate threshold -----", app.BitRate)
-            }
-            fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
-        }
-    }
+	fmt.Println("steam heltj chekc sone")
+	// Check to see if we have any active streams
+	// If not, change scene to our lost signal stream
+	// we can check for application outdoor having a client with state: publishing
+	for _, app := range respStruct.Apps {
+		if app.Name == "outdoor" {
+			if len(app.Publishing) == 0 {
+				// No publishing - lost signal
+				// should be covered by go pro disc event?
+				fmt.Println("No stream publisher found - ??")
+				continue
+			}
+			if app.BitRate < 1800000 {
+				//Low bitrate - maybe change scenes
+				// or show low bitrate warning, see what we can
+				// do over websocket
+				fmt.Println("---- Stream below bitrate threshold -----", app.BitRate)
+			}
+			fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
+		}
+	}
 }
 
 func flipStreamCamera() {
-    
-    /*prams := sceneitems.NewGetSceneItemListParams().
-        WithSceneName("outdoors")
-    r, err := goobsClient.SceneItems.GetSceneItemList(prams)
-    if err != nil {
-        fmt.Println("error getting scene item list", err.Error())
-        return
-    }
-    for _, v := range r.SceneItems {
-        fmt.Printf("Scene ID: %d - Source Name: %s\n", v.SceneItemID, v.SourceName)
-    }*/
-    gsitParams := sceneitems.NewGetSceneItemTransformParams().
-        WithSceneName("outdoors").
-        WithSceneItemId(1)
-    gsitResp, err := goobsClient.SceneItems.GetSceneItemTransform(gsitParams)
-    if err != nil {
-        fmt.Println("Error getting transform ", err.Error())
-        return
-    }
-    newTransform := gsitResp.SceneItemTransform
-    newTransform.Rotation = float64(int(newTransform.Rotation + 180) % 360)
-    params := sceneitems.NewSetSceneItemTransformParams().
-        WithSceneName("outdoors").
-        WithSceneItemId(1).
-        WithSceneItemTransform(newTransform)
-    _, err := goobsClient.SceneItems.SetSceneItemTransform(params)
-    if err != nil {
-        fmt.Println("Error setting transform ", err.Error())
-    }
+
+	/*prams := sceneitems.NewGetSceneItemListParams().
+	      WithSceneName("outdoors")
+	  r, err := goobsClient.SceneItems.GetSceneItemList(prams)
+	  if err != nil {
+	      fmt.Println("error getting scene item list", err.Error())
+	      return
+	  }
+	  for _, v := range r.SceneItems {
+	      fmt.Printf("Scene ID: %d - Source Name: %s\n", v.SceneItemID, v.SourceName)
+	  }*/
+	gsitParams := sceneitems.NewGetSceneItemTransformParams().
+		WithSceneName("outdoors").
+		WithSceneItemId(1)
+	gsitResp, err := goobsClient.SceneItems.GetSceneItemTransform(gsitParams)
+	if err != nil {
+		fmt.Println("Error getting transform ", err.Error())
+		return
+	}
+	newTransform := gsitResp.SceneItemTransform
+	newTransform.Rotation = float64(int(newTransform.Rotation+180) % 360)
+	params := sceneitems.NewSetSceneItemTransformParams().
+		WithSceneName("outdoors").
+		WithSceneItemId(1).
+		WithSceneItemTransform(newTransform)
+	_, err = goobsClient.SceneItems.SetSceneItemTransform(params)
+	if err != nil {
+		fmt.Println("Error setting transform ", err.Error())
+	}
 }
 
 func getCodePointsFromString(s string) []rune {
-    codePoints := []rune{}
-    for _, r := range s {
-        codePoints = append(codePoints, r)
-    }
-    return codePoints
+	codePoints := []rune{}
+	for _, r := range s {
+		codePoints = append(codePoints, r)
+	}
+	return codePoints
 }
 
 // perform any necessary cleanup here. should be called on
@@ -980,10 +983,10 @@ func cleanUp() {
 	// }
 	// rl.CloseAudioDevice()
 	// rl.CloseWindow()
-    if streamHealthCancelFunc != nil {
-        streamHealthCancelFunc()
-    }
-    fmt.Println("save the cube!")
-    cube.SaveCube()
-    os.Exit(0)
+	if streamHealthCancelFunc != nil {
+		streamHealthCancelFunc()
+	}
+	fmt.Println("save the cube!")
+	cube.SaveCube()
+	os.Exit(0)
 }
