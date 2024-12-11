@@ -81,6 +81,7 @@ var signalChannel chan os.Signal
 var useANT = false
 var obsCmd *exec.Cmd
 var camera rl.Camera3D
+var showPlanes = false
 
 const (
 	listenAddr = ":8081"
@@ -99,6 +100,7 @@ type RTMPApplication struct {
 
 func init() {
 	flag.BoolVar(&useANT, "a", false, "enable ANT sensor")
+	flag.BoolVar(&showPlanes, "p", false, "track seen adsb planes")
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
@@ -541,12 +543,16 @@ func main() {
         defer goobsClient.Disconnect()
     }
 
-    go func(){
-        for true {
-            planes.CheckForPlanes()
-            time.Sleep(time.Second * 5)
-        }
-    }()
+	if showPlanes {
+		fmt.Println("I've been asked to show planes")
+		go func() {
+			for {
+				planes.CheckForPlanes()
+				time.Sleep(time.Second * 5)
+			}
+		}()
+	}
+
 	for !rl.WindowShouldClose() {
 		game.Update()
 		game.Draw()
