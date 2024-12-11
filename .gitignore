@@ -1,6 +1,7 @@
 *.exe
 .vscode
 *.stuff
+SimConnect.dll
 
 accepted_hosts
 
