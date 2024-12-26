@@ -19,7 +19,7 @@ const (
 	cubeSize                   = 3 // X x X
 	lineSize     float32       = 3.0
 	drawOffsetX                = 150
-	drawOffsetY                = 1100
+	drawOffsetY                = 950
 	shuffleDelay               = 1      // ms between moves
 	shuffleTime  time.Duration = 100000 // seconds
 )
@@ -33,6 +33,11 @@ var moveCount uint64
 var currentScore int
 var highScore int
 var drawSize float32 = 20
+var movesFont rl.Font
+
+func LoadCubeAssets() {
+	movesFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
+}
 
 func init() {
 	j, err := os.ReadFile("cube.json")
@@ -240,6 +245,7 @@ func checkCube() bool {
 	return complete
 }
 
+// - This is taking appr 16ns to complete, which is almost 4 times slower than a face rotation
 // Simply count the matches to each center cube face[4]
 // A solved cube would be 48
 // One move away would be 36 - actually... this could be 2 moves away too...
@@ -255,28 +261,156 @@ func checkCube() bool {
 // When it's one move away
 func scoreCube() int {
 	var score int
-	for i := 0; i < len(c.front); i++ {
-		if i == 4 {
-			continue
-		}
-		if c.front[i] == c.front[4] {
-			score++
-		}
-		if c.back[i] == c.back[4] {
-			score++
-		}
-		if c.left[i] == c.left[4] {
-			score++
-		}
-		if c.right[i] == c.right[4] {
-			score++
-		}
-		if c.top[i] == c.top[4] {
-			score++
-		}
-		if c.bottom[i] == c.bottom[4] {
-			score++
-		}
+	if c.front[0] == c.front[4] {
+		score++
+	}
+	if c.back[0] == c.back[4] {
+		score++
+	}
+	if c.left[0] == c.left[4] {
+		score++
+	}
+	if c.right[0] == c.right[4] {
+		score++
+	}
+	if c.top[0] == c.top[4] {
+		score++
+	}
+	if c.bottom[0] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[1] == c.front[4] {
+		score++
+	}
+	if c.back[1] == c.back[4] {
+		score++
+	}
+	if c.left[1] == c.left[4] {
+		score++
+	}
+	if c.right[1] == c.right[4] {
+		score++
+	}
+	if c.top[1] == c.top[4] {
+		score++
+	}
+	if c.bottom[1] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[2] == c.front[4] {
+		score++
+	}
+	if c.back[2] == c.back[4] {
+		score++
+	}
+	if c.left[2] == c.left[4] {
+		score++
+	}
+	if c.right[2] == c.right[4] {
+		score++
+	}
+	if c.top[2] == c.top[4] {
+		score++
+	}
+	if c.bottom[2] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[3] == c.front[4] {
+		score++
+	}
+	if c.back[3] == c.back[4] {
+		score++
+	}
+	if c.left[3] == c.left[4] {
+		score++
+	}
+	if c.right[3] == c.right[4] {
+		score++
+	}
+	if c.top[3] == c.top[4] {
+		score++
+	}
+	if c.bottom[3] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[5] == c.front[4] {
+		score++
+	}
+	if c.back[5] == c.back[4] {
+		score++
+	}
+	if c.left[5] == c.left[4] {
+		score++
+	}
+	if c.right[5] == c.right[4] {
+		score++
+	}
+	if c.top[5] == c.top[4] {
+		score++
+	}
+	if c.bottom[5] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[6] == c.front[4] {
+		score++
+	}
+	if c.back[6] == c.back[4] {
+		score++
+	}
+	if c.left[6] == c.left[4] {
+		score++
+	}
+	if c.right[6] == c.right[4] {
+		score++
+	}
+	if c.top[6] == c.top[4] {
+		score++
+	}
+	if c.bottom[6] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[7] == c.front[4] {
+		score++
+	}
+	if c.back[7] == c.back[4] {
+		score++
+	}
+	if c.left[7] == c.left[4] {
+		score++
+	}
+	if c.right[7] == c.right[4] {
+		score++
+	}
+	if c.top[7] == c.top[4] {
+		score++
+	}
+	if c.bottom[7] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[8] == c.front[4] {
+		score++
+	}
+	if c.back[8] == c.back[4] {
+		score++
+	}
+	if c.left[8] == c.left[4] {
+		score++
+	}
+	if c.right[8] == c.right[4] {
+		score++
+	}
+	if c.top[8] == c.top[4] {
+		score++
+	}
+	if c.bottom[8] == c.bottom[4] {
+		score++
 	}
 	return score
 }
@@ -551,7 +685,7 @@ func Draw() {
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY - drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize, Y: drawOffsetY - drawSize}, lineSize, rl.Black)
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize/2, Y: drawOffsetY - drawSize/2}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize/2, Y: drawOffsetY - drawSize/2}, lineSize, rl.Black)
 
-	rl.DrawText(fmt.Sprintf("Moves: %d", moveCount), drawOffsetX, drawOffsetY-50, 18, rl.Orange)
+	rl.DrawTextEx(movesFont, fmt.Sprintf("Moves: %d", moveCount), rl.Vector2{drawOffsetX, drawOffsetY - 50}, 18, 0, rl.Orange)
 }
 
 func getColor(b byte) rl.Color {
@@ -588,7 +722,7 @@ func shuffle() {
 				return
 			default:
 				drawSize = 20
-				r := rand.Intn(20)
+				r := rand.Intn(18)
 				switch r {
 				case 0:
 					rotateFrontCW()
@@ -623,12 +757,8 @@ func shuffle() {
 				case 15:
 					rotateECCW()
 				case 16:
-					rotateMCW()
-				case 17:
-					rotateMCCW()
-				case 18:
 					rotateSCW()
-				case 19:
+				case 17:
 					rotateSCCW()
 				}
 				moveCount++
@@ -638,7 +768,8 @@ func shuffle() {
 				}
 				var timeToWait time.Duration = 0
 				if currentScore == 48 {
-					drawSize = 80
+					drawSize = 120
+					sound.Play("indigo")
 					fmt.Println("OMG IT DEIFN THSK WHOW")
 					hasShuffled = true
 					cubeLock.Unlock()

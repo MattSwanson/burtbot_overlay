@@ -530,6 +530,7 @@ func main() {
 	games.Load(screenWidth, screenHeight, game.connWriteChan)
 	defer games.Cleanup()
 	game.snakeGame = newSnake()
+	cube.LoadCubeAssets()
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
