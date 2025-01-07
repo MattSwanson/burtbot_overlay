@@ -194,11 +194,11 @@ func HandleCommand(args []string) {
 		case "E":
 			rotateECW()
 		case "E'":
-			rotateECW()
+			rotateECCW()
 		case "S":
 			rotateSCW()
 		case "S'":
-			rotateSCW()
+			rotateSCCW()
 		}
 		// check for completion
 		moveCount++
@@ -587,7 +587,7 @@ func rotateSCW() {
 func rotateSCCW() {
 	// top -> left -> bottom -> right -> top...
 	c.top[3], c.top[4], c.top[5], c.right[1], c.right[4], c.right[7], c.bottom[3], c.bottom[4], c.bottom[5], c.left[1], c.left[4], c.left[7] =
-		c.right[1], c.right[4], c.right[7], c.bottom[3], c.bottom[4], c.bottom[5], c.left[1], c.left[4], c.left[7], c.top[3], c.top[4], c.top[5]
+		c.right[1], c.right[4], c.right[7], c.bottom[5], c.bottom[4], c.bottom[3], c.left[1], c.left[4], c.left[7], c.top[5], c.top[4], c.top[3]
 }
 
 func start() {
