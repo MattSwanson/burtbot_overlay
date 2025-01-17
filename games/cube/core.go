@@ -34,45 +34,11 @@ var currentScore int
 var highScore int
 var drawSize float32 = 20
 var movesFont rl.Font
+var writeChannel chan string
 
-func LoadCubeAssets() {
+func LoadCubeAssets(wc chan string) {
 	movesFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
-}
-
-func init() {
-	j, err := os.ReadFile("cube.json")
-	if err != nil {
-		log.Println("couldn't load cube save")
-		resetCube()
-		return
-	}
-	data := struct {
-		Front      []byte
-		Back       []byte
-		Left       []byte
-		Right      []byte
-		Top        []byte
-		Bottom     []byte
-		TotalMoves uint64
-		HighScore  int
-	}{}
-	err = json.Unmarshal(j, &data)
-	if err != nil {
-		log.Println("couldn't parse cube save")
-		resetCube()
-	}
-	c = &cube{
-		front:  data.Front,
-		back:   data.Back,
-		top:    data.Top,
-		bottom: data.Bottom,
-		left:   data.Left,
-		right:  data.Right,
-	}
-	moveCount = data.TotalMoves
-	highScore = data.HighScore
-	hasShuffled = false
-
+	writeChannel = wc
 }
 
 type cube struct {
@@ -102,9 +68,10 @@ func HandleCommand(args []string) {
 	case "movecount":
 		speech.Speak(fmt.Sprintf("BurtBot has made %d moves on the cube", moveCount), false, false)
 	case "start":
-		start()
+		start(args[1])
 	case "stop":
 		stop()
+		SaveCube()
 	case "reset":
 		resetCube()
 	case "shuffle":
@@ -590,10 +557,35 @@ func rotateSCCW() {
 		c.right[1], c.right[4], c.right[7], c.bottom[5], c.bottom[4], c.bottom[3], c.left[1], c.left[4], c.left[7], c.top[5], c.top[4], c.top[3]
 }
 
-func start() {
+func start(startingState string) {
 	if running {
 		return
 	}
+	data := struct {
+		Front      []byte
+		Back       []byte
+		Left       []byte
+		Right      []byte
+		Top        []byte
+		Bottom     []byte
+		TotalMoves uint64
+		HighScore  int
+	}{}
+	err := json.Unmarshal([]byte(startingState), &data)
+	if err != nil {
+		log.Println("couldn't parse cube save")
+		resetCube()
+	}
+	c = &cube{
+		front:  data.Front,
+		back:   data.Back,
+		top:    data.Top,
+		bottom: data.Bottom,
+		left:   data.Left,
+		right:  data.Right,
+	}
+	moveCount = data.TotalMoves
+	highScore = data.HighScore
 	running = true
 }
 
@@ -818,6 +810,7 @@ func SaveCube() {
 		HighScore:  highScore,
 	}
 	json, _ := json.Marshal(data)
+	writeChannel <- fmt.Sprintf("cube %s\n", string(json))
 	if err := os.WriteFile("cube.json", json, 0644); err != nil {
 		log.Println(err.Error())
 	}
