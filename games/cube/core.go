@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,8 +19,6 @@ import (
 const (
 	cubeSize                   = 3 // X x X
 	lineSize     float32       = 3.0
-	drawOffsetX                = 150
-	drawOffsetY                = 950
 	shuffleDelay               = 1      // ms between moves
 	shuffleTime  time.Duration = 100000 // seconds
 )
@@ -33,8 +32,11 @@ var moveCount uint64
 var currentScore int
 var highScore int
 var drawSize float32 = 20
+var setDrawSize float32 = 20
 var movesFont rl.Font
 var writeChannel chan string
+var drawOffsetX float32 = 150
+var drawOffsetY float32 = 950
 
 func LoadCubeAssets(wc chan string) {
 	movesFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
@@ -76,6 +78,24 @@ func HandleCommand(args []string) {
 		resetCube()
 	case "shuffle":
 		shuffle()
+	case "pos":
+		// pos x y size
+		if len(args) < 4 {
+			return
+		}
+		newX, err := strconv.ParseFloat(args[1], 32)
+		if err != nil {
+			return
+		}
+		newY, err := strconv.ParseFloat(args[2], 32)
+		if err != nil {
+			return
+		}
+		newSize, err := strconv.ParseFloat(args[3], 32)
+		if err != nil {
+			return
+		}
+		drawOffsetX, drawOffsetY, setDrawSize = float32(newX), float32(newY), float32(newSize)
 	case "move":
 		if !running || len(args) < 2 {
 			return
@@ -713,7 +733,7 @@ func shuffle() {
 				cubeLock.Unlock()
 				return
 			default:
-				drawSize = 20
+				drawSize = setDrawSize
 				r := rand.Intn(18)
 				switch r {
 				case 0:
@@ -760,7 +780,7 @@ func shuffle() {
 				}
 				var timeToWait time.Duration = 0
 				if currentScore == 48 {
-					drawSize = 120
+					drawSize = 150
 					sound.Play("indigo")
 					fmt.Println("OMG IT DEIFN THSK WHOW")
 					hasShuffled = true
@@ -789,6 +809,9 @@ func shuffle() {
 func SaveCube() {
 	if randoCancelFunc != nil {
 		randoCancelFunc()
+	}
+	if c == nil {
+		return
 	}
 	data := struct {
 		Front      []byte
