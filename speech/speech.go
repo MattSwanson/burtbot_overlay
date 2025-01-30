@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
-    "math/rand"
 	"strings"
 	"time"
 
@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	ttsSampleRate = 44100
-    defaultVoiceName = "en-US-Wavenet-J"
-    defaultVoiceLanguageCode = "en-US"
-    defaultVoiceSampleRate = 44100
+	ttsSampleRate            = 44100
+	defaultVoiceName         = "en-US-Wavenet-J"
+	defaultVoiceLanguageCode = "en-US"
+	defaultVoiceSampleRate   = 44100
 )
 
 var cache []string // a slice of strings representing the sha256 of cached tts, loaded at init based on files present
@@ -137,16 +137,16 @@ func getTTS(txt string, useRandomVoice bool) ([]byte, error) {
 			SpeakingRate:    1.0,
 		},
 	}
-    currentSampleRate = defaultVoiceSampleRate
+	currentSampleRate = defaultVoiceSampleRate
 
-    if useRandomVoice {
-        n := rand.Intn(len(voices))
-        req.Voice.Name = voices[n].Name
-        req.Voice.LanguageCode = voices[n].LanguageCodes[0]
-        req.Voice.SsmlGender = voices[n].SsmlGender
-        req.AudioConfig.SampleRateHertz = voices[n].NaturalSampleRateHertz
-        currentSampleRate = voices[n].NaturalSampleRateHertz
-    }
+	if useRandomVoice {
+		n := rand.Intn(len(voices))
+		req.Voice.Name = voices[n].Name
+		req.Voice.LanguageCode = voices[n].LanguageCodes[0]
+		req.Voice.SsmlGender = voices[n].SsmlGender
+		req.AudioConfig.SampleRateHertz = voices[n].NaturalSampleRateHertz
+		currentSampleRate = voices[n].NaturalSampleRateHertz
+	}
 
 	resp, err := client.SynthesizeSpeech(ctx, &req)
 	if err != nil {
