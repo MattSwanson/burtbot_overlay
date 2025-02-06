@@ -720,7 +720,7 @@ func getColor(b byte) rl.Color {
 }
 
 func shuffle() {
-	if randoCancelFunc != nil {
+	if randoCancelFunc != nil || !running {
 		return
 	}
 	var c context.Context
