@@ -82,6 +82,7 @@ var useANT = false
 var obsCmd *exec.Cmd
 var camera rl.Camera3D
 var showPlanes = false
+var isVerbose = false
 
 const (
 	listenAddr = ":8081"
@@ -102,6 +103,7 @@ type RTMPApplication struct {
 func init() {
 	flag.BoolVar(&useANT, "a", false, "enable ANT sensor")
 	flag.BoolVar(&showPlanes, "p", false, "track seen adsb planes")
+	flag.BoolVar(&isVerbose, "v", false, "show all incoming messages")
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
@@ -602,7 +604,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	for scanner.Scan() {
 		txt := scanner.Text()
 		fields := strings.Fields(txt)
-		if len(fields) == 0 {
+		if len(fields) == 0 || fields[0] == "ping" {
 			continue
 		}
 		switch fields[0] {
@@ -729,7 +731,9 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{SteamCmd, []string{}}
 		}
 
-		fmt.Println(fields)
+		if isVerbose {
+			fmt.Println(fields)
+		}
 	}
 }
 
