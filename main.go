@@ -729,6 +729,8 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{RaidAlert, []string{}}
 		case "steam":
 			c <- cmd{SteamCmd, []string{}}
+		case "slots":
+			c <- cmd{GameCmd, fields}
 		}
 
 		if isVerbose {
