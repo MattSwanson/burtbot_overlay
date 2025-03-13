@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -530,5 +531,5 @@ func generateBarriers(n int) []*barrier {
 }
 
 func (c *Core) Cleanup() {
-    c.CancelTimer()
+	c.CancelTimer()
 }
