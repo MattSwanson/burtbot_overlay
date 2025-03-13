@@ -328,6 +328,9 @@ func (c *Core) CheckForCollision(delta float64) {
 		if b.y > gameHeight+50 {
 			b.falling = false
 			reward := b.Value.Mul(b.Value, big.NewInt(int64(c.rewardMultiplier)))
+			if reward.Cmp(big.NewInt(0)) == 1 {
+				sound.Play("gold")
+			}
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, reward)
 			c.tokens = removeBall(c.tokens, idx)
 		}
