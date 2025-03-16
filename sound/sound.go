@@ -46,7 +46,7 @@ func LoadSounds() {
 	sounds["moo_n5"] = rl.LoadSound("sounds/moo/neutral5.wav")
 	sounds["gold"] = rl.LoadSound("sounds/d2/gold.wav")
 	sounds["potiondrink"] = rl.LoadSound("sounds/d2/potiondrink.wav")
-	sounds["skull"] = rl.LoadSound("sounds/d2/skull")
+	sounds["skull"] = rl.LoadSound("sounds/d2/skull.wav")
 	sounds["ring"] = rl.LoadSound("sounds/d2/Ring.wav")
 	sounds["amulet"] = rl.LoadSound("sounds/d2/amulet.wav")
 	sounds["rune"] = rl.LoadSound("sounds/d2/rune.wav")
