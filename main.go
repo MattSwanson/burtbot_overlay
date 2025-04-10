@@ -312,7 +312,7 @@ func (g *Game) Update() {
 				if err != nil {
 					break
 				}
-				visuals.SetLightsColor(color)
+				go visuals.SetLightsColor(color)
 			}
 		case ErrorCmd:
 			g.errorManager.AddError(5)
