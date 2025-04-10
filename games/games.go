@@ -1,8 +1,6 @@
 package games
 
 import (
-	"fmt"
-
 	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
 	"github.com/MattSwanson/burtbot_overlay/games/plinko"
 	"github.com/MattSwanson/burtbot_overlay/games/slots"
@@ -48,7 +46,6 @@ func Update(delta float64) {
 // game we want to send a message to. If not in the map
 // then ignored
 func HandleMessage(message []string) {
-	fmt.Println("handlign thr mnsase", message[0])
 	if game, ok := games[message[0]]; ok {
 		game.HandleMessage(message[1:])
 	}
