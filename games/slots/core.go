@@ -1,6 +1,7 @@
 package slots
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -28,6 +29,8 @@ var coconutImg *rl.Image
 var pearImg *rl.Image
 var watermelonImg *rl.Image
 
+var rng *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 type reel struct {
 	texture       rl.Texture2D
 	frameStartY   float32
@@ -40,12 +43,14 @@ type reel struct {
 }
 
 type Core struct {
-	currentBet   int
-	currentUser  string
-	lastUpdate   time.Time
-	isActive     bool
-	writeChannel chan string
-	reels        []*reel
+	currentBet         int
+	currentUser        string
+	lastUpdate         time.Time
+	isActive           bool
+	isInfinite         bool
+	infiniteCancelFunc context.CancelFunc
+	writeChannel       chan string
+	reels              []*reel
 }
 
 func LoadSlots(wc chan string) *Core {
@@ -72,7 +77,7 @@ func LoadSlots(wc chan string) *Core {
 
 func newReel() *reel {
 	nums := []int{0, 1, 2, 3, 4, 5, 6}
-	rand.Shuffle(len(nums), func(i, j int) {
+	rng.Shuffle(len(nums), func(i, j int) {
 		nums[i], nums[j] = nums[j], nums[i]
 	})
 	texture := generateReelTexture(nums)
@@ -213,6 +218,12 @@ func (c *Core) HandleMessage(args []string) {
 	case "stop":
 		c.isActive = false
 		c.reset()
+	case "kick":
+		if !c.isInfinite {
+			return
+		}
+		c.infiniteCancelFunc()
+		c.isInfinite = false
 	}
 }
 
@@ -224,15 +235,18 @@ func (c *Core) Pull(args []string) {
 	if err != nil || bet <= 0 {
 		return
 	}
+	if rng.Intn(100) < 2 {
+		c.isInfinite = true
+	}
 	c.currentUser = args[2]
 	c.currentBet = bet
 	c.isActive = true
 	for i := range c.reels {
-		c.reels[i].targetSymbol = rand.Intn(7)
+		c.reels[i].targetSymbol = rng.Intn(7)
 		c.reels[i].isSpinning = true
 	}
 	go func() {
-		rm := time.Duration(500 - rand.Float64()*1000)
+		rm := time.Duration(500 - rng.Float64()*1000)
 		time.Sleep((reelOneSpinTime + rm) * time.Millisecond)
 		c.reels[0].isSpinning = false
 		idx := (7 - (int(c.reels[0].frameStartY)%896)/-128) % 7
@@ -240,18 +254,33 @@ func (c *Core) Pull(args []string) {
 		c.reels[0].currentSymbol = c.reels[0].symbolOrder[idx]
 	}()
 	go func() {
-		rm := time.Duration(500 - rand.Float64()*1000)
+		rm := time.Duration(500 - rng.Float64()*1000)
 		time.Sleep((reelTwoSpinTime + rm) * time.Millisecond)
 		c.reels[1].isSpinning = false
-		idx := (7 - (int(c.reels[0].frameStartY)%896)/-128) % 7
+		idx := (7 - (int(c.reels[1].frameStartY)%896)/-128) % 7
 		c.reels[1].frameStartY = float32(idx*128 - 64)
 		c.reels[1].currentSymbol = c.reels[1].symbolOrder[idx]
 	}()
-	go func() {
-		rm := time.Duration(500 - rand.Float64()*1000)
-		time.Sleep((reelThreeSpinTime + rm) * time.Millisecond)
+	var ctx context.Context
+	ctx, c.infiniteCancelFunc = context.WithCancel(context.Background())
+
+	go func(ctx context.Context) {
+		rm := time.Duration(500 - rng.Float64()*1000)
+		spinTime := (reelThreeSpinTime + rm)
+		if c.isInfinite {
+			spinTime = time.Duration(1_000_000_000_000_000_000)
+		}
+	WaitLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				break WaitLoop
+			case <-time.After(spinTime * time.Millisecond):
+				break WaitLoop
+			}
+		}
 		c.reels[2].isSpinning = false
-		idx := (7 - (int(c.reels[0].frameStartY)%896)/-128) % 7
+		idx := (7 - (int(c.reels[2].frameStartY)%896)/-128) % 7
 		c.reels[2].frameStartY = float32(idx*128 - 64)
 		c.reels[2].currentSymbol = c.reels[2].symbolOrder[idx]
 		mult := ScoreReels(c.reels)
@@ -260,7 +289,7 @@ func (c *Core) Pull(args []string) {
 		c.writeChannel <- fmt.Sprintf("slots result %s %d\n", c.currentUser, payout)
 		c.isActive = false
 		c.reset()
-	}()
+	}(ctx)
 }
 
 func (c *Core) Draw() {
