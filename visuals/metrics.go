@@ -28,10 +28,12 @@ var (
 	estDistance  float64
 	prevDistance float64
 	metricsFont  rl.Font
+    carImg       rl.Texture2D
 )
 
 func InitMetrics() {
-	metricsFont = rl.LoadFontEx("caskaydia.TTF", 72, nil, 0)
+	metricsFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
+    carImg = rl.LoadTexture("./images/car.png")
 }
 
 func DrawMetrics() {
@@ -43,6 +45,9 @@ func DrawMetrics() {
 		rl.DrawTextEx(metricsFont, fmt.Sprintf("%.1fmph", currentSpeed), rl.Vector2{X: 1150, Y: metricsTextY}, 72, 0, rl.Blue)
 	}
 	rl.DrawTextEx(metricsFont, fmt.Sprintf("~%.2fmi", estDistance), rl.Vector2{X: 50, Y: metricsTextY}, 72, 0, rl.Blue)
+    if carsBack > 0 {
+        rl.DrawTexture(carImg, 0, 0, rl.White)
+    }
 
 	if currentHR != 0 {
 		hrColor := rl.Blue

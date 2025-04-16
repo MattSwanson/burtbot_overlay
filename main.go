@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"image/color"
@@ -15,17 +16,21 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/games"
 	"github.com/MattSwanson/burtbot_overlay/games/cube"
-	"github.com/MattSwanson/burtbot_overlay/games/lightsout"
-	"github.com/MattSwanson/burtbot_overlay/games/plinko"
-	"github.com/MattSwanson/burtbot_overlay/games/tanks"
+	"github.com/MattSwanson/burtbot_overlay/planes"
 	"github.com/MattSwanson/burtbot_overlay/shaders"
 	"github.com/MattSwanson/burtbot_overlay/sound"
+	"github.com/MattSwanson/burtbot_overlay/speech"
 	"github.com/MattSwanson/burtbot_overlay/visuals"
+	"github.com/andreykaipov/goobs"
+	"github.com/andreykaipov/goobs/api/requests/sceneitems"
+	"github.com/andreykaipov/goobs/api/requests/scenes"
 	"golang.org/x/net/context"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -36,6 +41,7 @@ var ga Game
 var mwhipImg rl.Texture2D
 var mkImg rl.Texture2D
 var carImg rl.Texture2D
+var flashLightImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
@@ -47,6 +53,7 @@ var nowPlaying string
 var npTextY float32
 var npBGY int32
 var goodFont rl.Font
+var ibmFont rl.Font
 var moos = []string{
 	"moo_a1",
 	"moo_a2",
@@ -71,9 +78,12 @@ var moos = []string{
 }
 
 // var usbDriver *ant.GarminStick3
-// var signalChannel chan os.Signal
+var signalChannel chan os.Signal
 var useANT = false
 var obsCmd *exec.Cmd
+var camera rl.Camera3D
+var showPlanes = false
+var isVerbose = false
 
 const (
 	listenAddr = ":8081"
@@ -82,8 +92,19 @@ const (
 	npTextBottomY = 1375
 )
 
+var goobsClient *goobs.Client
+var streamHealthCancelFunc context.CancelFunc
+
+type RTMPApplication struct {
+	Name       string `xml:"name"`
+	BitRate    int    `xml:"live>stream>bw_video"`
+	Publishing []bool `xml:"live>stream>publishing"`
+}
+
 func init() {
 	flag.BoolVar(&useANT, "a", false, "enable ANT sensor")
+	flag.BoolVar(&showPlanes, "p", false, "track seen adsb planes")
+	flag.BoolVar(&isVerbose, "v", false, "show all incoming messages")
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
@@ -103,29 +124,25 @@ func init() {
 }
 
 type Game struct {
-	sprites         Sprites
-	commChannel     chan cmd
-	connWriteChan   chan string
-	showStatic      bool
-	staticLayer     static
-	gameRunning     bool
-	snakeGame       *Snake
-	plinko          *plinko.Core
-	tanks           *tanks.Core
-	lightsout       *lightsout.Core
-	currentInput    int
-	bigMouse        bool
-	bigMouseImg     rl.Texture2D
-	marquees        []*Marquee
-	marqueesEnabled bool
-	bopometer       *visuals.Bopometer
-	bingoOverlay    *visuals.BingoOverlay
-	lastUpdate      time.Time
-	showWhip        bool
-	showMK          bool
-	showDM          bool
-	showFSInfo      bool
-	errorManager    *visuals.ErrorManager
+	sprites        Sprites
+	commChannel    chan cmd
+	connWriteChan  chan string
+	showStatic     bool
+	staticLayer    static
+	gameRunning    bool
+	snakeGame      *Snake
+	currentInput   int
+	bigMouse       bool
+	bigMouseImg    rl.Texture2D
+	bopometer      *visuals.Bopometer
+	bingoOverlay   *visuals.BingoOverlay
+	lastUpdate     time.Time
+	showWhip       bool
+	showMK         bool
+	showDM         bool
+	showFSInfo     bool
+	showFlashLight bool
+	errorManager   *visuals.ErrorManager
 }
 
 type cmd struct {
@@ -142,12 +159,9 @@ const (
 	MarqueeCmd
 	SingleMarqueeCmd
 	TTS
-	PlinkoCmd
-	TanksCmd
 	BopCmd
 	MiracleCmd
 	MKCmd
-	LightsOutCmd
 	BingoCmd
 	LightsCmd
 	ErrorCmd
@@ -167,6 +181,8 @@ const (
 	MetricsCmd
 	RaidAlert
 	SteamCmd
+	GameCmd
+	FlashLightCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -195,10 +211,10 @@ func (g *Game) Update() {
 		}
 	}
 	select {
-	// case signal := <-signalChannel:
-	// 	if signal == os.Interrupt {
-	// 		cleanUp()
-	// 	}
+	case signal := <-signalChannel:
+		if signal == os.Interrupt {
+			cleanUp()
+		}
 	case key := <-g.commChannel:
 		switch key.command {
 		case int(rl.KeyUp):
@@ -224,7 +240,31 @@ func (g *Game) Update() {
 				g.quack(n)
 			}
 		case BigMouse:
-			g.bigMouse = !g.bigMouse
+			if g.bigMouse {
+				return
+			}
+			duration, err := strconv.Atoi(key.args[1])
+			if err != nil {
+				break
+			}
+			g.bigMouse = true
+			go func() {
+				time.Sleep(time.Second * time.Duration(duration))
+				g.bigMouse = false
+			}()
+		case FlashLightCmd:
+			if g.showFlashLight {
+				return
+			}
+			duration, err := strconv.Atoi(key.args[1])
+			if err != nil {
+				break
+			}
+			g.showFlashLight = true
+			go func() {
+				time.Sleep(time.Second * time.Duration(duration))
+				g.showFlashLight = false
+			}()
 		case SnakeCmd:
 			if key.args[0] == "start" && !g.gameRunning {
 				g.snakeGame.reset()
@@ -238,30 +278,18 @@ func (g *Game) Update() {
 			}
 		case MarqueeCmd:
 			if key.args[0] == "off" {
-				g.marqueesEnabled = false
-				g.marquees = []*Marquee{}
+				visuals.DisableMarquees()
 				break
 			}
-			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
-			m.setText(key.args[0])
-			g.marquees = append(g.marquees, m)
-			g.marqueesEnabled = true
+			visuals.NewMarquee(key.args[0], float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, false)
 		case SingleMarqueeCmd:
-			m := NewMarquee(float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
-			m.setText(key.args[0])
-			g.marquees = append(g.marquees, m)
-			g.marqueesEnabled = true
+			visuals.NewMarquee(key.args[0], float64(rand.Intn(250)+450), color.RGBA{0x00, 0xff, 0x00, 0xff}, true)
 		case TTS:
 			cache, _ := strconv.ParseBool(key.args[1])
-			go speak(key.args[0], cache)
-		case PlinkoCmd:
-			g.plinko.HandleMessage(key.args)
-		case TanksCmd:
-			g.tanks.HandleMessage(key.args)
+			randomVoice, _ := strconv.ParseBool(key.args[2])
+			go speech.Speak(key.args[0], cache, randomVoice)
 		case BopCmd:
 			g.bopometer.HandleMessage(key.args)
-		case LightsOutCmd:
-			g.lightsout.HandleMessage(key.args)
 		case BingoCmd:
 			g.bingoOverlay.HandleMessage(key.args)
 		case MiracleCmd:
@@ -284,7 +312,7 @@ func (g *Game) Update() {
 				if err != nil {
 					break
 				}
-				visuals.SetLightsColor(color)
+				go visuals.SetLightsColor(color)
 			}
 		case ErrorCmd:
 			g.errorManager.AddError(5)
@@ -314,6 +342,9 @@ func (g *Game) Update() {
 			if key.args[0] == "off" {
 				nowPlaying = ""
 			} else {
+				cps := getCodePointsFromString("Now Playing: " + key.args[0])
+				fmt.Println(cps)
+				ibmFont = rl.LoadFontEx("IBMPlexSansJP-Regular.otf", 48, cps)
 				nowPlaying = key.args[0]
 			}
 		case NpTextCmd:
@@ -340,11 +371,13 @@ func (g *Game) Update() {
 				startStream()
 			} else if key.args[0] == "stop" {
 				stopStream()
+			} else if key.args[0] == "flip" {
+				flipStreamCamera()
 			}
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
 				visuals.EnableMetrics(true)
-				speak("Metrics have arrived.", true)
+				speech.Speak("Metrics have arrived.", true, false)
 			}
 			lastMetricsUpdate = time.Now()
 			visuals.HandleMetricsMessage(key.args)
@@ -352,6 +385,8 @@ func (g *Game) Update() {
 			g.raidAlert()
 		case SteamCmd:
 			visuals.NewSteam().GetRandomGame()
+		case GameCmd:
+			games.HandleMessage(key.args)
 		}
 	default:
 	}
@@ -359,25 +394,15 @@ func (g *Game) Update() {
 		g.snakeGame.Update(g.currentInput)
 		g.currentInput = 0
 	}
-	g.plinko.Update()
+	games.Update(delta)
 	if g.showStatic {
 		g.staticLayer.Update()
 	}
 	g.bopometer.Update(delta)
-	if g.marqueesEnabled {
-		UpdateEmoteCache(delta)
-		for i := 0; i < len(g.marquees); i++ {
-			if err := g.marquees[i].Update(delta); err != nil {
-				copy(g.marquees[i:], g.marquees[i+1:])
-				g.marquees[len(g.marquees)-1] = nil
-				g.marquees = g.marquees[:len(g.marquees)-1]
-			}
-		}
-	}
+	visuals.UpdateMarquees(delta)
 	if g.showDM {
 		visuals.UpdateDMarquee(delta)
 	}
-	g.tanks.Update(delta)
 	if g.errorManager.Visible {
 		g.errorManager.Update(delta)
 	}
@@ -388,7 +413,7 @@ func (g *Game) Update() {
 		}
 	}
 	if visuals.MetricsEnabled() && time.Since(lastMetricsUpdate).Seconds() > 10 {
-		go speak("Looks like I lost the metrics... Sorry about that.", true)
+		go speech.Speak("Looks like I lost the metrics... Sorry about that.", true, false)
 		visuals.EnableMetrics(false)
 	}
 	g.lastUpdate = time.Now()
@@ -397,22 +422,41 @@ func (g *Game) Update() {
 func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
+	rl.DrawPixel(0, 0, rl.Color{R: 0x00, G: 0x00, B: 0x00, A: 0x00})
+	rl.BeginMode3D(camera)
+	if showtux {
+		rl.DrawBillboard(camera, sprites[2], tuxpos, 2.5, rl.White)
+	}
+	rl.EndMode3D()
 
-	//rl.DrawFPS(50, 50)
+	mpos := rl.GetMousePosition()
+	if g.showFlashLight {
+		flx := int32(mpos.X) - 2560
+		if flx < -2560 {
+			flx = -2560
+		}
+		fly := int32(mpos.Y) - 1440
+		if fly < -1440 {
+			fly = -1440
+		}
+		rl.DrawTexture(flashLightImg, flx, fly, rl.White)
+	}
+
+	if g.bigMouse {
+		rl.DrawTexture(sprites[2], int32(mpos.X)-925, int32(mpos.Y)-1100, rl.White)
+	}
+
+	//	rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
 
-	if g.bigMouse {
-		rl.DrawTexture(g.bigMouseImg, rl.GetMouseX(), rl.GetMouseY(), rl.White)
-	}
 	if dedCount > 0 {
 		rl.DrawText(fmt.Sprintf("ded count: %d", dedCount), 25, 1340, 64, rl.Orange)
 	}
-	g.tanks.Draw()
+	games.Draw()
 	if g.showDM {
 		visuals.DrawDMarquee()
 	}
-	g.lightsout.Draw()
 
 	if g.gameRunning {
 		g.snakeGame.Draw()
@@ -423,19 +467,16 @@ func (g *Game) Draw() {
 	// if g.showStatic {
 	// 	g.staticLayer.Draw(screen)
 	// }
-	g.plinko.Draw()
 	g.bopometer.Draw()
 	cube.Draw()
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
-	visuals.DrawFSInfo(g.showFSInfo)
+	if g.showFSInfo {
+		visuals.DrawFSInfo()
+	}
 	visuals.DrawSteamOverlay()
 
-	if g.marqueesEnabled {
-		for i := 0; i < len(g.marquees); i++ {
-			g.marquees[i].Draw()
-		}
-	}
+	visuals.DrawMarquees()
 
 	if g.showWhip {
 		rl.DrawTextureEx(mwhipImg, rl.Vector2{X: 560, Y: 0}, 0, 0.6, rl.White)
@@ -451,7 +492,7 @@ func (g *Game) Draw() {
 
 	if nowPlaying != "" {
 		rl.DrawRectangle(0, npBGY, 2560, 75, rl.Color{R: 0, G: 0, B: 0, A: 192})
-		rl.DrawTextEx(goodFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
+		rl.DrawTextEx(ibmFont, fmt.Sprintf("Now Playing: %s", nowPlaying), rl.Vector2{X: 25, Y: npTextY}, 48, 0, rl.SkyBlue)
 	}
 
 	rl.EndDrawing()
@@ -462,15 +503,22 @@ func main() {
 
 	http.HandleFunc("/go_pro_start", goProConnected)
 	http.HandleFunc("/go_pro_stop", goProDisconnected)
-	go http.ListenAndServe(":8082", nil)
+	go http.ListenAndServe(":8083", nil)
 	rl.SetConfigFlags(rl.FlagWindowMousePassthrough | rl.FlagWindowTopmost | rl.FlagWindowUndecorated | rl.FlagWindowTransparent)
 	rl.InitWindow(screenWidth, screenHeight, "burtbot overlay")
 	rl.SetTargetFPS(60)
 	rl.InitAudioDevice()
 	rl.SetMasterVolume(sound.MasterVolume)
 	sound.LoadSounds()
-	//signalChannel = make(chan os.Signal, 1)
-	//signal.Notify(signalChannel, os.Interrupt)
+	camera = rl.NewCamera3D(
+		rl.Vector3{X: 0.0, Y: 0.0, Z: 10.0},
+		rl.Vector3{X: 0.0, Y: 0.0, Z: 0.0},
+		rl.Vector3{X: 0.0, Y: 1.0, Z: 0.0},
+		45.0,
+		rl.CameraPerspective,
+	)
+	signalChannel = make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt)
 	// if useANT {
 	// 	usbCtx := gousb.NewContext()
 	// 	defer usbCtx.Close()
@@ -480,6 +528,7 @@ func main() {
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	mkImg = rl.LoadTexture("./images/mk.png")
 	carImg = rl.LoadTexture("./images/car.png")
+	flashLightImg = rl.LoadTexture("./images/flashlight.png")
 	LoadSprites()
 	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
@@ -491,8 +540,9 @@ func main() {
 	ga.connWriteChan = make(chan string)
 	game := &ga
 	game.bigMouseImg = sprites[2]
-	LoadMarqueeFonts()
-	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil, 0)
+	visuals.LoadMarqueeFonts()
+	goodFont = rl.LoadFontEx("caskaydia.TTF", 48, nil)
+	ibmFont = rl.LoadFontEx("IBMPlexMono-Regular.ttf", 48, nil)
 	npTextY = npTextBottomY
 	npBGY = int32(npTextY - 10)
 	ln, err := net.Listen("tcp", listenAddr)
@@ -517,24 +567,41 @@ func main() {
 				}
 			}
 			if !acceptedHost {
-				go speak("Intrusion Detected", true)
+				//go speech.Speak("Intrusion Detected", true, false)
 				conn.Close()
 				continue
 			}
 			go handleConnection(conn, c, wc)
 		}
 	}(game.commChannel, ga.connWriteChan)
-	game.plinko = plinko.Load(screenWidth, screenHeight, game.connWriteChan)
-	defer game.plinko.CancelTimer()
-	//game.plinkoRunning = true
+	games.Load(screenWidth, screenHeight, game.connWriteChan)
+	defer games.Cleanup()
 	game.snakeGame = newSnake()
-	game.tanks = tanks.Load(screenWidth, screenHeight)
+	cube.LoadCubeAssets(game.connWriteChan)
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
-	game.lightsout = lightsout.NewGame(5, 5)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
 	if err := visuals.PollFS(); err != nil {
 		fmt.Println("Couldn't connect to sim")
+	}
+
+	goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
+	if err != nil {
+		log.Println("Couldn't connect to OBSWS - ", err.Error())
+	}
+	if goobsClient != nil {
+		fmt.Println("Connected to OBSWS interface")
+		defer goobsClient.Disconnect()
+	}
+
+	if showPlanes {
+		fmt.Println("I've been asked to show planes")
+		go func() {
+			for {
+				planes.CheckForPlanes()
+				time.Sleep(time.Second * 5)
+			}
+		}()
 	}
 
 	for !rl.WindowShouldClose() {
@@ -577,12 +644,12 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	defer cancel()
 	fmt.Println("client connected")
 	msg := connMessages[rand.Intn(len(connMessages))]
-	go speak(msg, true)
+	go speech.Speak(msg, true, false)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		txt := scanner.Text()
 		fields := strings.Fields(txt)
-		if len(fields) == 0 {
+		if len(fields) == 0 || fields[0] == "ping" {
 			continue
 		}
 		switch fields[0] {
@@ -608,7 +675,15 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 		case "killgophs":
 			c <- cmd{KillGophs, []string{}}
 		case "bigmouse":
-			c <- cmd{BigMouse, []string{}}
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{BigMouse, fields}
+		case "flashlight":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{FlashLightCmd, fields}
 		case "snake":
 			if len(fields) < 2 {
 				continue
@@ -627,20 +702,20 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 				c <- cmd{SingleMarqueeCmd, []string{txt[12:]}}
 			}
 		case "tts":
-			if len(fields) < 3 {
+			if len(fields) < 4 {
 				continue
 			}
-			c <- cmd{TTS, []string{strings.Join(fields[2:], " "), fields[1]}}
+			c <- cmd{TTS, []string{strings.Join(fields[3:], " "), fields[1], fields[2]}}
 		case "plinko":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{PlinkoCmd, fields[1:]}
+			c <- cmd{GameCmd, fields}
 		case "tanks":
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{TanksCmd, fields[1:]}
+			c <- cmd{GameCmd, fields}
 		case "bop":
 			if len(fields) < 2 {
 				continue
@@ -654,7 +729,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			if len(fields) < 2 {
 				continue
 			}
-			c <- cmd{LightsOutCmd, fields[1:]}
+			c <- cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)} //hacky
 		case "bingo":
 			if len(fields) < 2 {
 				continue
@@ -707,9 +782,13 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{RaidAlert, []string{}}
 		case "steam":
 			c <- cmd{SteamCmd, []string{}}
+		case "slots":
+			c <- cmd{GameCmd, fields}
 		}
 
-		fmt.Println(fields)
+		if isVerbose {
+			fmt.Println(fields)
+		}
 	}
 }
 
@@ -792,7 +871,7 @@ func (g *Game) raidAlert() {
 			sound.Play("voltage")
 			time.Sleep(sleepTime)
 		}
-		speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true)
+		speech.Speak(fmt.Sprintf("Sorry. This raid alert is broken. Please try again another time and apologies for the inconvenience. Error Number %d", time.Now().UnixNano()), true, false)
 	}()
 }
 
@@ -803,7 +882,7 @@ func startStream() bool {
 		return false
 	}
 	fmt.Println("attempting stream start")
-	cmd := exec.Command("flatpak", "run", "com.obsproject.Studio", "--startstreaming")
+	cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
 	if err := cmd.Start(); err != nil {
 		log.Println(err)
 		return false
@@ -817,23 +896,142 @@ func stopStream() {
 	if obsCmd == nil {
 		return
 	}
-	cmd := exec.Command("flatpak", "kill", "com.obsproject.Studio")
-	if err := cmd.Start(); err != nil {
-		log.Println(err)
-		return
-	}
 	obsCmd.Process.Kill()
 	obsCmd = nil
 }
 
+// TODO - Need to account for the scenario where the overlay closes
+// mid stream. As of now, the only way to pick back up the stream
+// health checks would be for the go pro stream to restart to
+// trigger this event.  Maybe on overlay start, do one health check
+// and if we find a publisher, call this function manually??
 func goProConnected(w http.ResponseWriter, r *http.Request) {
-	speak("Go pro connected", true)
+	speech.Speak("Go pro connected", true, false)
+	if goobsClient != nil {
+		params := scenes.NewSetCurrentProgramSceneParams().
+			WithSceneName("outdoors")
+		goobsClient.Scenes.SetCurrentProgramScene(params)
+	}
+	if streamHealthCancelFunc != nil {
+		// if we already have a health check running and
+		// it didn't close properly, don't start another
+		fmt.Fprintf(w, "got it\n")
+		return
+	}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	streamHealthCancelFunc = cancelFunc
+	go func(ctx context.Context) {
+		fmt.Println("starting health check llooolp")
+		ticker := time.NewTicker(time.Second * 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fmt.Println("tick")
+				checkGoProStreamHealth()
+			}
+		}
+	}(ctx)
 	fmt.Fprintf(w, "got it\n")
 }
 
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
-	speak("Go pro disconnected", true)
+	speech.Speak("Go pro disconnected", true, false)
+	if streamHealthCancelFunc != nil {
+		// Clean up any stream health checks
+		params := scenes.NewSetCurrentProgramSceneParams().
+			WithSceneName("no_signal")
+		goobsClient.Scenes.SetCurrentProgramScene(params)
+		streamHealthCancelFunc()
+	}
 	fmt.Fprintf(w, "go it\n")
+}
+
+func checkGoProStreamHealth() {
+	respStruct := struct {
+		Apps []RTMPApplication `xml:"server>application"`
+	}{}
+
+	req, err := http.NewRequest("GET", "http://192.168.0.29:8080/stat", nil)
+	if err != nil {
+		log.Println("Error getting stream health update", err.Error())
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("Error getting stream health", err.Error())
+		return
+	}
+
+	err = xml.NewDecoder(resp.Body).Decode(&respStruct)
+	if err != nil {
+		fmt.Println("Err parsing resp body xml health", err.Error())
+		return
+	}
+
+	fmt.Println("steam heltj chekc sone")
+	// Check to see if we have any active streams
+	// If not, change scene to our lost signal stream
+	// we can check for application outdoor having a client with state: publishing
+	for _, app := range respStruct.Apps {
+		if app.Name == "outdoor" {
+			if len(app.Publishing) == 0 {
+				// No publishing - lost signal
+				// should be covered by go pro disc event?
+				fmt.Println("No stream publisher found - ??")
+				continue
+			}
+			if app.BitRate < 1800000 {
+				//Low bitrate - maybe change scenes
+				// or show low bitrate warning, see what we can
+				// do over websocket
+				fmt.Println("---- Stream below bitrate threshold -----", app.BitRate)
+			}
+			fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
+		}
+	}
+}
+
+func flipStreamCamera() {
+
+	/*prams := sceneitems.NewGetSceneItemListParams().
+	      WithSceneName("outdoors")
+	  r, err := goobsClient.SceneItems.GetSceneItemList(prams)
+	  if err != nil {
+	      fmt.Println("error getting scene item list", err.Error())
+	      return
+	  }
+	  for _, v := range r.SceneItems {
+	      fmt.Printf("Scene ID: %d - Source Name: %s\n", v.SceneItemID, v.SourceName)
+	  }*/
+	gsitParams := sceneitems.NewGetSceneItemTransformParams().
+		WithSceneName("outdoors").
+		WithSceneItemId(1)
+	gsitResp, err := goobsClient.SceneItems.GetSceneItemTransform(gsitParams)
+	if err != nil {
+		fmt.Println("Error getting transform ", err.Error())
+		return
+	}
+	newTransform := gsitResp.SceneItemTransform
+	newTransform.Rotation = float64(int(newTransform.Rotation+180) % 360)
+	params := sceneitems.NewSetSceneItemTransformParams().
+		WithSceneName("outdoors").
+		WithSceneItemId(1).
+		WithSceneItemTransform(newTransform)
+	_, err = goobsClient.SceneItems.SetSceneItemTransform(params)
+	if err != nil {
+		fmt.Println("Error setting transform ", err.Error())
+	}
+}
+
+func getCodePointsFromString(s string) []rune {
+	codePoints := []rune{}
+	for _, r := range s {
+		codePoints = append(codePoints, r)
+	}
+	return codePoints
 }
 
 // perform any necessary cleanup here. should be called on
@@ -845,4 +1043,10 @@ func cleanUp() {
 	// }
 	// rl.CloseAudioDevice()
 	// rl.CloseWindow()
+	if streamHealthCancelFunc != nil {
+		streamHealthCancelFunc()
+	}
+	fmt.Println("save the cube!")
+	cube.SaveCube()
+	os.Exit(0)
 }

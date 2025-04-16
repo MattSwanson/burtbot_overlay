@@ -2,22 +2,25 @@ package cube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
+	"github.com/MattSwanson/burtbot_overlay/speech"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
 const (
-	cubeSize             = 3 // X x X
-	drawSize             = 80
-	lineSize     float32 = 3.0
-	drawOffsetX          = 150
-	drawOffsetY          = 1100
-	shuffleDelay         = 100 // ms between moves
-	shuffleTime          = 15  // seconds
+	cubeSize                   = 3 // X x X
+	lineSize     float32       = 3.0
+	shuffleDelay               = 1      // ms between moves
+	shuffleTime  time.Duration = 100000 // seconds
 )
 
 var running bool
@@ -25,9 +28,19 @@ var c *cube
 var randoCancelFunc context.CancelFunc
 var cubeLock sync.Mutex = sync.Mutex{}
 var hasShuffled bool
+var moveCount uint64
+var currentScore int
+var highScore int
+var drawSize float32 = 20
+var setDrawSize float32 = 20
+var movesFont rl.Font
+var writeChannel chan string
+var drawOffsetX float32 = 150
+var drawOffsetY float32 = 950
 
-func init() {
-	resetCube()
+func LoadCubeAssets(wc chan string) {
+	movesFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
+	writeChannel = wc
 }
 
 type cube struct {
@@ -54,14 +67,35 @@ type cube struct {
 
 func HandleCommand(args []string) {
 	switch args[0] {
+	case "movecount":
+		speech.Speak(fmt.Sprintf("BurtBot has made %d moves on the cube", moveCount), false, false)
 	case "start":
-		start()
+		start(args[1])
 	case "stop":
 		stop()
+		SaveCube()
 	case "reset":
 		resetCube()
 	case "shuffle":
 		shuffle()
+	case "pos":
+		// pos x y size
+		if len(args) < 4 {
+			return
+		}
+		newX, err := strconv.ParseFloat(args[1], 32)
+		if err != nil {
+			return
+		}
+		newY, err := strconv.ParseFloat(args[2], 32)
+		if err != nil {
+			return
+		}
+		newSize, err := strconv.ParseFloat(args[3], 32)
+		if err != nil {
+			return
+		}
+		drawOffsetX, drawOffsetY, setDrawSize = float32(newX), float32(newY), float32(newSize)
 	case "move":
 		if !running || len(args) < 2 {
 			return
@@ -71,138 +105,103 @@ func HandleCommand(args []string) {
 		case "R":
 			rotateRightCW()
 		case "R'":
-			rotateRightCW()
-			rotateRightCW()
-			rotateRightCW()
+			rotateRightCCW()
 		case "r":
 			rotateRightCW()
 			rotateMCW()
 		case "r'":
-			rotateRightCW()
-			rotateRightCW()
-			rotateRightCW()
-			rotateMCW()
-			rotateMCW()
-			rotateMCW()
+			rotateRightCCW()
+			rotateMCCW()
 		case "L":
 			rotateLeftCW()
 		case "L'":
-			rotateLeftCW()
-			rotateLeftCW()
-			rotateLeftCW()
+			rotateLeftCCW()
 		case "l":
 			rotateLeftCW()
-			rotateMCW()
-			rotateMCW()
-			rotateMCW()
+			rotateMCCW()
 		case "l'":
-			rotateLeftCW()
-			rotateLeftCW()
-			rotateLeftCW()
+			rotateLeftCCW()
 			rotateMCW()
 		case "U":
 			rotateTopCW()
 		case "U'":
-			rotateTopCW()
-			rotateTopCW()
-			rotateTopCW()
+			rotateTopCCW()
 		case "u":
 			rotateTopCW()
-			rotateECW()
-			rotateECW()
-			rotateECW()
+			rotateECCW()
 		case "u'":
-			rotateTopCW()
-			rotateTopCW()
-			rotateTopCW()
+			rotateTopCCW()
 			rotateECW()
 		case "D":
 			rotateBottomCW()
 		case "D'":
-			rotateBottomCW()
-			rotateBottomCW()
-			rotateBottomCW()
+			rotateBottomCCW()
 		case "d":
 			rotateBottomCW()
 			rotateECW()
 		case "d'":
-			rotateBottomCW()
-			rotateBottomCW()
-			rotateBottomCW()
-			rotateECW()
-			rotateECW()
-			rotateECW()
+			rotateBottomCCW()
+			rotateECCW()
 		case "F":
 			rotateFrontCW()
 		case "F'":
-			rotateFrontCW()
-			rotateFrontCW()
-			rotateFrontCW()
+			rotateFrontCCW()
 		case "f":
 			rotateFrontCW()
 			rotateSCW()
 		case "f'":
-			rotateFrontCW()
-			rotateFrontCW()
-			rotateFrontCW()
-			rotateSCW()
-			rotateSCW()
-			rotateSCW()
+			rotateFrontCCW()
+			rotateSCCW()
 		case "M":
 			rotateMCW()
 		case "M'":
-			rotateMCW()
-			rotateMCW()
-			rotateMCW()
+			rotateMCCW()
 		case "B":
 			rotateBackCW()
 		case "B'":
-			rotateBackCW()
-			rotateBackCW()
-			rotateBackCW()
+			rotateBackCCW()
 		case "b":
 			rotateBackCW()
-			rotateSCW()
-			rotateSCW()
-			rotateSCW()
+			rotateSCCW()
 		case "b'":
-			rotateBackCW()
-			rotateBackCW()
-			rotateBackCW()
+			rotateBackCCW()
 			rotateSCW()
 		case "X":
 			rotateXCW()
 		case "X'":
-			rotateXCW()
-			rotateXCW()
-			rotateXCW()
+			rotateXCCW()
 		case "Y":
 			rotateYCW()
 		case "Y'":
-			rotateYCW()
-			rotateYCW()
-			rotateYCW()
+			rotateYCCW()
 		case "Z":
 			rotateZCW()
 		case "Z'":
-			rotateZCW()
-			rotateZCW()
-			rotateZCW()
+			rotateZCCW()
 		case "E":
 			rotateECW()
 		case "E'":
-			rotateECW()
+			rotateECCW()
 		case "S":
 			rotateSCW()
 		case "S'":
-			rotateSCW()
+			rotateSCCW()
 		}
 		// check for completion
+		moveCount++
 		if checkCube() {
 			fmt.Println("oh joy")
 		}
 		cubeLock.Unlock()
 	}
+}
+
+func GetHighScore() int {
+	return highScore
+}
+
+func GetTotalCubeMoves() uint64 {
+	return moveCount
 }
 
 func resetCube() {
@@ -214,12 +213,17 @@ func resetCube() {
 		left:   []byte{'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'},
 		right:  []byte{'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R'},
 	}
+	moveCount = 0
+	highScore = 0
+	hasShuffled = false
 }
 
+// TODO Can we make a version of this which returns a level of completion?
+// I'd like to slow down the shuffling mess when it's like one move away??
 func checkCube() bool {
 	complete := true
 	for i := 0; i < len(c.front); i++ {
-		if c.front[i] != c.front[4] || c.back[i] != c.front[4] || c.top[i] != c.top[4] ||
+		if c.front[i] != c.front[4] || c.back[i] != c.back[4] || c.top[i] != c.top[4] ||
 			c.bottom[i] != c.bottom[4] || c.left[i] != c.left[4] || c.right[i] != c.right[4] {
 			return false
 		}
@@ -228,13 +232,184 @@ func checkCube() bool {
 	return complete
 }
 
+// - This is taking appr 16ns to complete, which is almost 4 times slower than a face rotation
+// Simply count the matches to each center cube face[4]
+// A solved cube would be 48
+// One move away would be 36 - actually... this could be 2 moves away too...
+//   - unless we track how close certain parts are to their target face,
+//     if that makes any sense
+//
+// A score between 36 and 48 could actually require more moves
+//
+//	and some may be un obtainable
+//
+// 24 could be two moves and also 26
+// There's probably a better way to do this, but I just want to slow the shuffle
+// When it's one move away
+func scoreCube() int {
+	var score int
+	if c.front[0] == c.front[4] {
+		score++
+	}
+	if c.back[0] == c.back[4] {
+		score++
+	}
+	if c.left[0] == c.left[4] {
+		score++
+	}
+	if c.right[0] == c.right[4] {
+		score++
+	}
+	if c.top[0] == c.top[4] {
+		score++
+	}
+	if c.bottom[0] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[1] == c.front[4] {
+		score++
+	}
+	if c.back[1] == c.back[4] {
+		score++
+	}
+	if c.left[1] == c.left[4] {
+		score++
+	}
+	if c.right[1] == c.right[4] {
+		score++
+	}
+	if c.top[1] == c.top[4] {
+		score++
+	}
+	if c.bottom[1] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[2] == c.front[4] {
+		score++
+	}
+	if c.back[2] == c.back[4] {
+		score++
+	}
+	if c.left[2] == c.left[4] {
+		score++
+	}
+	if c.right[2] == c.right[4] {
+		score++
+	}
+	if c.top[2] == c.top[4] {
+		score++
+	}
+	if c.bottom[2] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[3] == c.front[4] {
+		score++
+	}
+	if c.back[3] == c.back[4] {
+		score++
+	}
+	if c.left[3] == c.left[4] {
+		score++
+	}
+	if c.right[3] == c.right[4] {
+		score++
+	}
+	if c.top[3] == c.top[4] {
+		score++
+	}
+	if c.bottom[3] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[5] == c.front[4] {
+		score++
+	}
+	if c.back[5] == c.back[4] {
+		score++
+	}
+	if c.left[5] == c.left[4] {
+		score++
+	}
+	if c.right[5] == c.right[4] {
+		score++
+	}
+	if c.top[5] == c.top[4] {
+		score++
+	}
+	if c.bottom[5] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[6] == c.front[4] {
+		score++
+	}
+	if c.back[6] == c.back[4] {
+		score++
+	}
+	if c.left[6] == c.left[4] {
+		score++
+	}
+	if c.right[6] == c.right[4] {
+		score++
+	}
+	if c.top[6] == c.top[4] {
+		score++
+	}
+	if c.bottom[6] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[7] == c.front[4] {
+		score++
+	}
+	if c.back[7] == c.back[4] {
+		score++
+	}
+	if c.left[7] == c.left[4] {
+		score++
+	}
+	if c.right[7] == c.right[4] {
+		score++
+	}
+	if c.top[7] == c.top[4] {
+		score++
+	}
+	if c.bottom[7] == c.bottom[4] {
+		score++
+	}
+
+	if c.front[8] == c.front[4] {
+		score++
+	}
+	if c.back[8] == c.back[4] {
+		score++
+	}
+	if c.left[8] == c.left[4] {
+		score++
+	}
+	if c.right[8] == c.right[4] {
+		score++
+	}
+	if c.top[8] == c.top[4] {
+		score++
+	}
+	if c.bottom[8] == c.bottom[4] {
+		score++
+	}
+	return score
+}
+
 func rotateFaceCW(face []byte) {
 	face[0], face[2], face[8], face[6] = face[6], face[0], face[2], face[8]
 	face[1], face[5], face[7], face[3] = face[3], face[1], face[5], face[7]
 }
 
-func win() {
-
+func rotateFaceCCW(face []byte) {
+	face[0], face[2], face[8], face[6] = face[2], face[8], face[6], face[0]
+	face[1], face[5], face[7], face[3] = face[5], face[7], face[3], face[1]
 }
 
 func rotateFrontCW() {
@@ -244,11 +419,24 @@ func rotateFrontCW() {
 		c.right[6], c.right[3], c.right[0], c.bottom[0], c.bottom[1], c.bottom[2]
 }
 
+func rotateFrontCCW() {
+	rotateFaceCCW(c.front)
+	c.top[6], c.top[7], c.top[8], c.right[0], c.right[3], c.right[6], c.bottom[0], c.bottom[1], c.bottom[2],
+		c.left[2], c.left[5], c.left[8] = c.right[0], c.right[3], c.right[6], c.bottom[2], c.bottom[1], c.bottom[0],
+		c.left[2], c.left[5], c.left[8], c.top[8], c.top[7], c.top[6]
+}
+
 func rotateTopCW() {
 	rotateFaceCW(c.top)
 	c.back[0], c.back[1], c.back[2], c.right[0], c.right[1], c.right[2], c.front[0], c.front[1], c.front[2],
 		c.left[0], c.left[1], c.left[2] = c.left[0], c.left[1], c.left[2], c.back[0], c.back[1], c.back[2],
 		c.right[0], c.right[1], c.right[2], c.front[0], c.front[1], c.front[2]
+}
+
+func rotateTopCCW() {
+	rotateFaceCCW(c.top)
+	c.back[0], c.back[1], c.back[2], c.right[0], c.right[1], c.right[2], c.front[0], c.front[1], c.front[2], c.left[0], c.left[1], c.left[2] =
+		c.right[0], c.right[1], c.right[2], c.front[0], c.front[1], c.front[2], c.left[0], c.left[1], c.left[2], c.back[0], c.back[1], c.back[2]
 }
 
 func rotateRightCW() {
@@ -258,11 +446,23 @@ func rotateRightCW() {
 		c.back[6], c.back[3], c.back[0], c.bottom[2], c.bottom[5], c.bottom[8]
 }
 
+func rotateRightCCW() {
+	rotateFaceCCW(c.right)
+	c.top[2], c.top[5], c.top[8], c.back[0], c.back[3], c.back[6], c.bottom[2], c.bottom[5], c.bottom[8], c.front[2], c.front[5], c.front[8] =
+		c.back[6], c.back[3], c.back[0], c.bottom[8], c.bottom[5], c.bottom[2], c.front[2], c.front[5], c.front[8], c.top[2], c.top[5], c.top[8]
+}
+
 func rotateLeftCW() {
 	rotateFaceCW(c.left)
 	c.top[0], c.top[3], c.top[6], c.front[0], c.front[3], c.front[6], c.bottom[0], c.bottom[3], c.bottom[6],
 		c.back[2], c.back[5], c.back[8] = c.back[8], c.back[5], c.back[2], c.top[0], c.top[3], c.top[6],
 		c.front[0], c.front[3], c.front[6], c.bottom[6], c.bottom[3], c.bottom[0]
+}
+
+func rotateLeftCCW() {
+	rotateFaceCCW(c.left)
+	c.top[0], c.top[3], c.top[6], c.front[0], c.front[3], c.front[6], c.bottom[0], c.bottom[3], c.bottom[6], c.back[2], c.back[5], c.back[8] =
+		c.front[0], c.front[3], c.front[6], c.bottom[0], c.bottom[3], c.bottom[6], c.back[8], c.back[5], c.back[2], c.top[6], c.top[3], c.top[0]
 }
 
 func rotateBottomCW() {
@@ -273,6 +473,13 @@ func rotateBottomCW() {
 		c.right[6], c.right[7], c.right[8], c.back[6], c.back[7], c.back[8]
 }
 
+func rotateBottomCCW() {
+	rotateFaceCCW(c.bottom)
+	// front -> left -> back -> right -> front ...
+	c.front[6], c.front[7], c.front[8], c.right[6], c.right[7], c.right[8], c.back[6], c.back[7], c.back[8], c.left[6], c.left[7], c.left[8] =
+		c.right[6], c.right[7], c.right[8], c.back[6], c.back[7], c.back[8], c.left[6], c.left[7], c.left[8], c.front[6], c.front[7], c.front[8]
+}
+
 func rotateBackCW() {
 	rotateFaceCW(c.back)
 	// top -> left -> bottom -> right -> top...
@@ -281,33 +488,51 @@ func rotateBackCW() {
 		c.left[0], c.left[3], c.left[6], c.bottom[8], c.bottom[7], c.bottom[6]
 }
 
+func rotateBackCCW() {
+	rotateFaceCCW(c.back)
+	// top -> right -> bottom -> left -> top...
+	c.top[0], c.top[1], c.top[2], c.left[0], c.left[3], c.left[6], c.bottom[6], c.bottom[7], c.bottom[8], c.right[2], c.right[5], c.right[8] =
+		c.left[6], c.left[3], c.left[0], c.bottom[6], c.bottom[7], c.bottom[8], c.right[8], c.right[5], c.right[2], c.top[0], c.top[1], c.top[2]
+}
+
 func rotateYCW() {
 	// right -> front -> left -> back -> right...
 	rotateTopCW()
-	rotateECW()
-	rotateECW()
-	rotateECW()
-	rotateBottomCW()
-	rotateBottomCW()
-	rotateBottomCW()
+	rotateECCW()
+	rotateBottomCCW()
+}
 
+func rotateYCCW() {
+	// left -> front -> right -> back -> left...
+	rotateTopCCW()
+	rotateECW()
+	rotateBottomCW()
 }
 
 func rotateXCW() {
 	// top -> back -> bottom -> front -> top...
-	rotateLeftCW()
-	rotateLeftCW()
-	rotateLeftCW()
+	rotateLeftCCW()
 	rotateRightCW()
 	rotateMCW()
+}
+
+func rotateXCCW() {
+	// top -> front -> bottom -> back -> top...
+	rotateLeftCW()
+	rotateRightCCW()
+	rotateMCCW()
 }
 
 func rotateZCW() {
 	// top -> right -> bottom -> left -> top...
 	rotateFrontCW()
 	rotateSCW()
-	rotateBackCW()
-	rotateBackCW()
+	rotateBackCCW()
+}
+
+func rotateZCCW() {
+	rotateFrontCCW()
+	rotateSCCW()
 	rotateBackCW()
 }
 
@@ -318,12 +543,25 @@ func rotateMCW() {
 		c.back[7], c.back[4], c.back[1], c.bottom[1], c.bottom[4], c.bottom[7]
 }
 
+func rotateMCCW() {
+	// top -> front -> bottom -> back -> top...
+	c.top[1], c.top[4], c.top[7], c.back[1], c.back[4], c.back[7], c.bottom[1], c.bottom[4], c.bottom[7], c.front[1], c.front[4], c.front[7] =
+		c.back[7], c.back[4], c.back[1], c.bottom[7], c.bottom[4], c.bottom[1], c.front[1], c.front[4], c.front[7], c.top[1], c.top[4], c.top[7]
+}
+
 func rotateECW() {
 	// this is clockwise relative to the bottom
 	// front -> right -> back -> left -> front...
 	c.front[3], c.front[4], c.front[5], c.right[3], c.right[4], c.right[5], c.back[3], c.back[4], c.back[5],
 		c.left[3], c.left[4], c.left[5] = c.left[3], c.left[4], c.left[5], c.front[3], c.front[4], c.front[5],
 		c.right[3], c.right[4], c.right[5], c.back[3], c.back[4], c.back[5]
+}
+
+func rotateECCW() {
+	// this is clockwise relative to the bottom
+	// front -> left -> back -> right -> front...
+	c.front[3], c.front[4], c.front[5], c.right[3], c.right[4], c.right[5], c.back[3], c.back[4], c.back[5], c.left[3], c.left[4], c.left[5] =
+		c.right[3], c.right[4], c.right[5], c.back[3], c.back[4], c.back[5], c.left[3], c.left[4], c.left[5], c.front[3], c.front[4], c.front[5]
 }
 
 func rotateSCW() {
@@ -333,10 +571,41 @@ func rotateSCW() {
 		c.right[7], c.right[4], c.right[1], c.bottom[3], c.bottom[4], c.bottom[5]
 }
 
-func start() {
+func rotateSCCW() {
+	// top -> left -> bottom -> right -> top...
+	c.top[3], c.top[4], c.top[5], c.right[1], c.right[4], c.right[7], c.bottom[3], c.bottom[4], c.bottom[5], c.left[1], c.left[4], c.left[7] =
+		c.right[1], c.right[4], c.right[7], c.bottom[5], c.bottom[4], c.bottom[3], c.left[1], c.left[4], c.left[7], c.top[5], c.top[4], c.top[3]
+}
+
+func start(startingState string) {
 	if running {
 		return
 	}
+	data := struct {
+		Front      []byte
+		Back       []byte
+		Left       []byte
+		Right      []byte
+		Top        []byte
+		Bottom     []byte
+		TotalMoves uint64
+		HighScore  int
+	}{}
+	err := json.Unmarshal([]byte(startingState), &data)
+	if err != nil {
+		log.Println("couldn't parse cube save")
+		resetCube()
+	}
+	c = &cube{
+		front:  data.Front,
+		back:   data.Back,
+		top:    data.Top,
+		bottom: data.Bottom,
+		left:   data.Left,
+		right:  data.Right,
+	}
+	moveCount = data.TotalMoves
+	highScore = data.HighScore
 	running = true
 }
 
@@ -344,6 +613,10 @@ func stop() {
 	if !running {
 		return
 	}
+	if randoCancelFunc != nil {
+		randoCancelFunc()
+	}
+	randoCancelFunc = nil
 	running = false
 }
 
@@ -353,21 +626,27 @@ func Draw() {
 	}
 
 	for k, v := range c.top {
-		//rl.DrawRectangle(cubeSize*drawSize+drawSize*int32(k%cubeSize), drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
-
-		// we know the bottom 3 need to butt up agains the top of the front face
+		drawPosBaseY := drawOffsetY - drawSize*cubeSize
+		cubeOffset := float32(cubeSize - 1 - k/cubeSize)
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},          // TL
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                               // BL
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)) + drawSize/2.0 + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)}, // TR
-			{X: float32(drawOffsetX+drawSize*int32(k%cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0), Y: drawOffsetY - drawSize*cubeSize + float32(drawSize*int32(k/cubeSize)+drawSize) + float32(int32(cubeSize-1-k/cubeSize)*drawSize/2.0)},                      // BR
+			{X: drawOffsetX + drawSize*float32(k%cubeSize) + drawSize/2.0 + cubeOffset*drawSize/2.0,
+				Y: drawPosBaseY + drawSize*float32(k/cubeSize) + drawSize/2.0 + cubeOffset*drawSize/2.0}, // TL
+
+			{X: drawOffsetX + drawSize*float32(k%cubeSize) + cubeOffset*drawSize/2.0,
+				Y: drawPosBaseY + drawSize*float32(k/cubeSize) + drawSize + (cubeOffset * drawSize / 2.0)}, // BL
+
+			{X: (drawOffsetX + drawSize*float32(k%cubeSize) + drawSize) + drawSize/2.0 + float32(cubeOffset*drawSize/2.0),
+				Y: drawPosBaseY + float32(drawSize*float32(k/cubeSize)) + drawSize/2.0 + float32(cubeOffset*drawSize/2.0)}, // TR
+
+			{X: float32(drawOffsetX+drawSize*float32(k%cubeSize)+drawSize) + float32(cubeOffset*drawSize/2.0),
+				Y: drawPosBaseY + float32(drawSize*float32(k/cubeSize)+drawSize) + float32(cubeOffset*drawSize/2.0)}, // BR
 		}, getColor(v))
 	}
 	// for k, v := range c.bottom {
 	// 	rl.DrawRectangle(cubeSize*drawSize+drawSize*int32(k%cubeSize), 2*cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
 	// }
 	for k, v := range c.front {
-		rl.DrawRectangle(drawOffsetX+drawSize*int32(k%cubeSize), drawOffsetY+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
+		rl.DrawRectangle(int32(drawOffsetX+drawSize*float32(k%cubeSize)), int32(drawOffsetY+drawSize*float32(k/cubeSize)), int32(drawSize), int32(drawSize), getColor(v))
 	}
 	// for k, v := range c.back {
 	// 	rl.DrawRectangle(3*cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
@@ -378,10 +657,10 @@ func Draw() {
 	for k, v := range c.right {
 		//rl.DrawRectangle(2*cubeSize*drawSize+drawSize*int32(k%cubeSize), cubeSize*drawSize+drawSize*int32(k/cubeSize), drawSize, drawSize, getColor(v))
 		rl.DrawTriangleStrip([]rl.Vector2{
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - float32(int32(k%cubeSize)*drawSize/2.0)},                               // TL
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)+drawSize) - float32(int32(k%cubeSize)*drawSize/2.0)},                      // BL
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) - drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // TR
-			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*int32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*int32(k/cubeSize)) + drawSize/2.0 - float32(int32(k%cubeSize)*drawSize/2.0)}, // BR
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)) - float32(float32(k%cubeSize)*drawSize/2.0)},                               // TL
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)+drawSize) - float32(float32(k%cubeSize)*drawSize/2.0)},                      // BL
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)) - drawSize/2.0 - float32(float32(k%cubeSize)*drawSize/2.0)}, // TR
+			{X: float32(drawOffsetX + cubeSize*drawSize + drawSize*float32(k%cubeSize)/2.0 + drawSize/2.0), Y: drawOffsetY - cubeSize*drawSize + float32(cubeSize*drawSize+drawSize*float32(k/cubeSize)) + drawSize/2.0 - float32(float32(k%cubeSize)*drawSize/2.0)}, // BR
 		}, getColor(v))
 	}
 
@@ -418,6 +697,7 @@ func Draw() {
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize, Y: drawOffsetY - drawSize}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize, Y: drawOffsetY - drawSize}, lineSize, rl.Black)
 	rl.DrawLineEx(rl.Vector2{X: drawOffsetX + drawSize/2, Y: drawOffsetY - drawSize/2}, rl.Vector2{X: drawOffsetX + cubeSize*drawSize + drawSize/2, Y: drawOffsetY - drawSize/2}, lineSize, rl.Black)
 
+	rl.DrawTextEx(movesFont, fmt.Sprintf("Moves: %d", moveCount), rl.Vector2{drawOffsetX, drawOffsetY - 50}, 18, 0, rl.Orange)
 }
 
 func getColor(b byte) rl.Color {
@@ -440,8 +720,7 @@ func getColor(b byte) rl.Color {
 }
 
 func shuffle() {
-
-	if randoCancelFunc != nil {
+	if randoCancelFunc != nil || !running {
 		return
 	}
 	var c context.Context
@@ -451,9 +730,11 @@ func shuffle() {
 		for {
 			select {
 			case <-ctx.Done():
+				cubeLock.Unlock()
 				return
 			default:
-				r := rand.Intn(10)
+				drawSize = setDrawSize
+				r := rand.Intn(18)
 				switch r {
 				case 0:
 					rotateFrontCW()
@@ -466,25 +747,94 @@ func shuffle() {
 				case 4:
 					rotateMCW()
 				case 5:
-					rotateXCW()
-				case 6:
-					rotateYCW()
-				case 7:
-					rotateZCW()
-				case 8:
 					rotateBackCW()
-				case 9:
+				case 6:
 					rotateBottomCW()
+				case 7:
+					rotateFrontCCW()
+				case 8:
+					rotateTopCCW()
+				case 9:
+					rotateRightCCW()
+				case 10:
+					rotateLeftCCW()
+				case 11:
+					rotateMCCW()
+				case 12:
+					rotateBackCCW()
+				case 13:
+					rotateBottomCCW()
+				case 14:
+					rotateECW()
+				case 15:
+					rotateECCW()
+				case 16:
+					rotateSCW()
+				case 17:
+					rotateSCCW()
 				}
-				time.Sleep(shuffleDelay * time.Millisecond)
+				moveCount++
+				currentScore = scoreCube()
+				if currentScore > highScore {
+					highScore = currentScore
+				}
+				var timeToWait time.Duration = 0
+				if currentScore == 48 {
+					drawSize = 150
+					sound.Play("indigo")
+					fmt.Println("OMG IT DEIFN THSK WHOW")
+					hasShuffled = true
+					cubeLock.Unlock()
+					return
+				}
+				if currentScore == 36 {
+					drawSize = 80
+					sound.Play("sosumi")
+					timeToWait = 10000000000
+					time.Sleep(timeToWait * time.Nanosecond)
+				}
+				//time.Sleep(timeToWait * time.Nanosecond)
 			}
 		}
 	}(c)
+
 	go func() {
 		time.Sleep(shuffleTime * time.Second)
 		randoCancelFunc()
 		randoCancelFunc = nil
 		hasShuffled = true
-		cubeLock.Unlock()
 	}()
+}
+
+func SaveCube() {
+	if randoCancelFunc != nil {
+		randoCancelFunc()
+	}
+	if c == nil {
+		return
+	}
+	data := struct {
+		Front      []byte
+		Back       []byte
+		Left       []byte
+		Right      []byte
+		Top        []byte
+		Bottom     []byte
+		TotalMoves uint64
+		HighScore  int
+	}{
+		Front:      c.front,
+		Back:       c.back,
+		Left:       c.left,
+		Right:      c.right,
+		Top:        c.top,
+		Bottom:     c.bottom,
+		TotalMoves: moveCount,
+		HighScore:  highScore,
+	}
+	json, _ := json.Marshal(data)
+	writeChannel <- fmt.Sprintf("cube %s\n", string(json))
+	if err := os.WriteFile("cube.json", json, 0644); err != nil {
+		log.Println(err.Error())
+	}
 }

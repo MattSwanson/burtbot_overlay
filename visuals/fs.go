@@ -112,7 +112,7 @@ func init() {
 
 func LoadFSAssets() {
 	fmt.Println("--- Loading FS Assets ---")
-	fsFont = rl.LoadFontEx("caskaydia.TTF", 72, nil, 0)
+	fsFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
 	LoadFlightPlan()
 }
 

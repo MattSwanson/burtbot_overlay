@@ -3,8 +3,10 @@ package visuals
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -41,7 +43,7 @@ var textColors = map[string]rl.Color{
 }
 
 func LoadDropsAssets() {
-	dropFont = rl.LoadFontEx("./visuals/Exocet2.ttf", dropTextSize, nil, 0)
+	dropFont = rl.LoadFontEx("./visuals/Exocet2.ttf", dropTextSize, nil)
 }
 
 func ShowDrops(j string) {
@@ -63,7 +65,23 @@ func ShowDrops(j string) {
 			bounds:    rl.MeasureTextEx(dropFont, dropStr.Name, textSize, 0),
 			name:      dropStr.Name,
 		}
-
+		lower := strings.ToLower(dropStr.Name)
+		if strings.Contains(lower, "gold") {
+			sound.Play("gold")
+		}
+		if strings.Contains(lower, "rune") {
+			sound.Play("rune")
+		}
+		if strings.Contains(lower, "scroll") {
+			sound.Play("scroll")
+		}
+		if strings.Contains(lower, "skull") {
+			sound.Play("skull")
+		}
+		if strings.Contains(lower, "topaz") || strings.Contains(lower, "sapphire") || strings.Contains(lower, "amethyst") ||
+			strings.Contains(lower, "ruby") || strings.Contains(lower, "emerald") || strings.Contains(lower, "diamond") {
+			sound.Play("gem")
+		}
 		currentDrops = append(currentDrops, d)
 	}
 	showingDrops = true

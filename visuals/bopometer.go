@@ -39,8 +39,8 @@ func LoadBopometerAssets() {
 	largeBop = rl.LoadTexture("./images/bopL.png")
 	bg = rl.LoadTexture("./images/bopometer_bg.png")
 	//bopFont = rl.LoadFont("caskaydia.TTF")
-	bopFont = rl.LoadFontEx("caskaydia.TTF", textSize, nil, 0)
-	largeBopFont = rl.LoadFontEx("caskaydia.TTF", largeTextSize, nil, 0)
+	bopFont = rl.LoadFontEx("caskaydia.TTF", textSize, nil)
+	largeBopFont = rl.LoadFontEx("caskaydia.TTF", largeTextSize, nil)
 	rl.GenTextureMipmaps(&bopFont.Texture)
 	rl.SetTextureFilter(bopFont.Texture, rl.FilterAnisotropic16x)
 }

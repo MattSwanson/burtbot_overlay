@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MattSwanson/burtbot_overlay/sound"
 	rl "github.com/MattSwanson/raylib-go/raylib"
 )
 
@@ -328,6 +329,9 @@ func (c *Core) CheckForCollision(delta float64) {
 		if b.y > gameHeight+50 {
 			b.falling = false
 			reward := b.Value.Mul(b.Value, big.NewInt(int64(c.rewardMultiplier)))
+			if reward.Cmp(big.NewInt(0)) == 1 {
+				sound.Play("gold")
+			}
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, reward)
 			c.tokens = removeBall(c.tokens, idx)
 		}
@@ -339,7 +343,7 @@ func removeBall(s []*token, i int) []*token {
 	return s[:len(s)-1]
 }
 
-func (c *Core) Update() error {
+func (c *Core) Update(d float64) {
 	select {
 	case <-timerChannel:
 		for i := 0; i < len(c.queues); i++ {
@@ -361,8 +365,6 @@ func (c *Core) Update() error {
 	}
 	c.CheckForCollision(delta)
 	c.lastUpdate = time.Now()
-
-	return nil
 }
 
 func (c *Core) HandleMessage(args []string) {
@@ -526,4 +528,8 @@ func generateBarriers(n int) []*barrier {
 	}
 
 	return barriers
+}
+
+func (c *Core) Cleanup() {
+	c.CancelTimer()
 }
