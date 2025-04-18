@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"math/rand"
 	"strconv"
 	"time"
 
@@ -331,6 +332,13 @@ func (c *Core) CheckForCollision(delta float64) {
 			reward := b.Value.Mul(b.Value, big.NewInt(int64(c.rewardMultiplier)))
 			if reward.Cmp(big.NewInt(0)) == 1 {
 				sound.Play("gold")
+			} else {
+				if rand.Intn(50) < 1 && b.tokenType == typeNormal {
+					c.writeChannel <- fmt.Sprintf("plinko secondChance %s\n", b.playerName)
+					c.tokens = removeBall(c.tokens, idx)
+					c.DropBall(c.currentDropPoint, big.NewInt(1), b.playerName, "#FFFFFF", typeSecondChance)
+					return
+				}
 			}
 			c.writeChannel <- fmt.Sprintf("plinko result %s %d\n", b.playerName, reward)
 			c.tokens = removeBall(c.tokens, idx)
@@ -395,7 +403,7 @@ func (c *Core) HandleMessage(args []string) {
 				return
 			}
 		}
-		c.DropBall(n, value, args[2], color)
+		c.DropBall(n, value, args[2], color, typeNormal)
 	}
 }
 
@@ -420,19 +428,22 @@ func (c *Core) Draw() {
 	}
 }
 
-func (c *Core) DropBall(pos int, value *big.Int, playerName, playerColor string) {
+func (c *Core) DropBall(pos int, value *big.Int, playerName, playerColor string, tokenType int) {
 	// make a new token with its pos set to the selected drop point
 	if pos < 0 || pos >= len(c.queues) {
 		return // do nothing for now, but should return an error
 		// or is this validated on the other end? no
 	}
-	t := NewToken(playerName, playerColor, tokenImg, c.queues[pos].dropPosition, value)
+	if value.Cmp(big.NewInt(1)) == 1 {
+		tokenType = typeSuper
+	}
+	t := NewToken(playerName, playerColor, tokenImg, c.queues[pos].dropPosition, value, tokenType)
 	c.queues[pos].push(t)
 }
 
 func (c *Core) DropAll(playerName, playerColor string) {
 	for i := 0; i < len(c.queues); i++ {
-		c.DropBall(i, big.NewInt(1), playerName, playerColor)
+		c.DropBall(i, big.NewInt(1), playerName, playerColor, typeNormal)
 	}
 }
 

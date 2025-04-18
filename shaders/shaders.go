@@ -16,6 +16,8 @@ func LoadShaders() {
 	cosmicTexture = rl.LoadTexture("./images/stars.png")
 	shaderTexTwoLoc = rl.GetShaderLocation(shaders["cosmic"], "stars")
 	rl.SetShaderValueTexture(shaders["cosmic"], shaderTexTwoLoc, cosmicTexture)
+
+	shaders["secondChance"] = rl.LoadShader("./shaders/base.vs", "./shaders/secondChance.fs")
 }
 
 func Get(shaderName string) rl.Shader {
