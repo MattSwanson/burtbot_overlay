@@ -11,12 +11,16 @@ import (
 )
 
 const (
-	tokenMass = 5
+	tokenMass        = 5
+	typeNormal       = 0x00
+	typeSuper        = 0x01
+	typeSecondChance = 0x02
 )
 
 type token struct {
 	falling     bool
 	mass        int
+	tokenType   int
 	x           float64
 	y           float64
 	vx          float64
@@ -26,10 +30,12 @@ type token struct {
 	playerName  string
 	playerColor rl.Color
 	labelOffset fPoint
+	shader      rl.Shader
 	Value       *big.Int
 }
 
-func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value *big.Int) *token {
+// TODO: Update to specify a special token type to make and set the shader accordingly
+func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value *big.Int, tokenType int) *token {
 	radius := float64(img.Width) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	color, err := colorHexStrToColor(playerColor)
@@ -37,18 +43,28 @@ func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, valu
 		log.Println("could not convert hex string to color", err.Error())
 		color = rl.Blue
 	}
-	// if value > 100 {
-	// 	color = rl.White
-	// }
+	shader := rl.GetShaderDefault()
+	switch tokenType {
+	case typeSuper:
+		shader = shaders.Get("cosmic")
+		shaders.SetOffsets("cosmic", img.Width, img.Height)
+	case typeSecondChance:
+		shader = shaders.Get("secondChance")
+		shaders.SetOffsets("secondChance", img.Width, img.Height)
+	}
+
+	//TODO: Set shader based on token created (super, second chance etc.)
 	return &token{
 		mass:        tokenMass,
 		x:           pos.x,
 		y:           pos.y,
 		img:         img,
+		tokenType:   tokenType,
 		radius:      radius,
 		playerName:  playerName,
 		playerColor: color,
 		labelOffset: labelOffset,
+		shader:      shader,
 		Value:       value,
 	}
 }
@@ -75,18 +91,10 @@ func (b *token) Draw() {
 	if !b.falling {
 		return
 	}
-	if b.Value.Cmp(big.NewInt(100)) == 1 {
-		shaders.SetOffsets(b.img.Width, b.img.Height)
-		rl.BeginShaderMode(shaders.Get("cosmic"))
-		//loc := rl.GetShaderLocation(superShader, "u_time")
-		//rl.SetShaderValue(superShader, loc, []float32{float32(time.Now().UnixNano())}, rl.ShaderUniformFloat)
-	}
+	rl.BeginShaderMode(b.shader)
 	rl.DrawTexture(b.img, int32(b.x), int32(b.y), b.playerColor)
-	if b.Value.Cmp(big.NewInt(100)) == 1 {
-		rl.EndShaderMode()
-	}
+	rl.EndShaderMode()
 	rl.DrawText(b.playerName, int32(b.x+b.labelOffset.x), int32(b.y+b.labelOffset.y), 18, rl.Green)
-
 }
 
 func (b *token) Release() {

@@ -9,15 +9,15 @@ import (
 var shaders map[string]rl.Shader = map[string]rl.Shader{}
 
 var cosmicTexture rl.Texture2D
-var cosmicOffsetLocation int32
 var shaderTexTwoLoc int32
 
 func LoadShaders() {
 	shaders["cosmic"] = rl.LoadShader("./shaders/base.vs", "./shaders/cosmic.fs")
 	cosmicTexture = rl.LoadTexture("./images/stars.png")
 	shaderTexTwoLoc = rl.GetShaderLocation(shaders["cosmic"], "stars")
-	cosmicOffsetLocation = rl.GetShaderLocation(shaders["cosmic"], "tc_offset")
 	rl.SetShaderValueTexture(shaders["cosmic"], shaderTexTwoLoc, cosmicTexture)
+
+	shaders["secondChance"] = rl.LoadShader("./shaders/base.vs", "./shaders/secondChance.fs")
 }
 
 func Get(shaderName string) rl.Shader {
@@ -28,9 +28,9 @@ func Get(shaderName string) rl.Shader {
 	return shader
 }
 
-func SetOffsets(width, height int32) {
+func SetOffsets(shader string, width, height int32) {
 	texelW, texelH := 0.5/float32(width), 0.5/float32(height)
-	rl.SetShaderValue(shaders["cosmic"], cosmicOffsetLocation, []float32{
+	rl.SetShaderValue(shaders[shader], rl.GetShaderLocation(shaders[shader], "tc_offset"), []float32{
 		-texelW, -texelH,
 		-texelW, 0,
 		-texelW, texelH,

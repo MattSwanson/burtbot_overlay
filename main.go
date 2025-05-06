@@ -42,6 +42,7 @@ var ga Game
 var mwhipImg rl.Texture2D
 var mkImg rl.Texture2D
 var carImg rl.Texture2D
+var flashLightImg rl.Texture2D
 var acceptedHosts []string
 var dedCount int
 
@@ -83,6 +84,7 @@ var useANT = false
 var obsCmd *exec.Cmd
 var camera rl.Camera3D
 var showPlanes = false
+var isVerbose = false
 
 const (
 	listenAddr = ":8081"
@@ -111,6 +113,7 @@ type RTMPApplication struct {
 func init() {
 	flag.BoolVar(&useANT, "a", false, "enable ANT sensor")
 	flag.BoolVar(&showPlanes, "p", false, "track seen adsb planes")
+	flag.BoolVar(&isVerbose, "v", false, "show all incoming messages")
 	xs := make([]*Sprite, maxSprites)
 	ga.sprites = Sprites{sprites: xs, num: 0, screenWidth: screenWidth, screenHeight: screenHeight}
 	ga.lastUpdate = time.Now()
@@ -130,24 +133,25 @@ func init() {
 }
 
 type Game struct {
-	sprites       Sprites
-	commChannel   chan cmd
-	connWriteChan chan string
-	showStatic    bool
-	staticLayer   static
-	gameRunning   bool
-	snakeGame     *Snake
-	currentInput  int
-	bigMouse      bool
-	bigMouseImg   rl.Texture2D
-	bopometer     *visuals.Bopometer
-	bingoOverlay  *visuals.BingoOverlay
-	lastUpdate    time.Time
-	showWhip      bool
-	showMK        bool
-	showDM        bool
-	showFSInfo    bool
-	errorManager  *visuals.ErrorManager
+	sprites        Sprites
+	commChannel    chan cmd
+	connWriteChan  chan string
+	showStatic     bool
+	staticLayer    static
+	gameRunning    bool
+	snakeGame      *Snake
+	currentInput   int
+	bigMouse       bool
+	bigMouseImg    rl.Texture2D
+	bopometer      *visuals.Bopometer
+	bingoOverlay   *visuals.BingoOverlay
+	lastUpdate     time.Time
+	showWhip       bool
+	showMK         bool
+	showDM         bool
+	showFSInfo     bool
+	showFlashLight bool
+	errorManager   *visuals.ErrorManager
 }
 
 type cmd struct {
@@ -187,6 +191,7 @@ const (
 	RaidAlert
 	SteamCmd
 	GameCmd
+	FlashLightCmd
 
 	screenWidth  = 2560
 	screenHeight = 1440
@@ -244,7 +249,31 @@ func (g *Game) Update() {
 				g.quack(n)
 			}
 		case BigMouse:
-			g.bigMouse = !g.bigMouse
+			if g.bigMouse {
+				return
+			}
+			duration, err := strconv.Atoi(key.args[1])
+			if err != nil {
+				break
+			}
+			g.bigMouse = true
+			go func() {
+				time.Sleep(time.Second * time.Duration(duration))
+				g.bigMouse = false
+			}()
+		case FlashLightCmd:
+			if g.showFlashLight {
+				return
+			}
+			duration, err := strconv.Atoi(key.args[1])
+			if err != nil {
+				break
+			}
+			g.showFlashLight = true
+			go func() {
+				time.Sleep(time.Second * time.Duration(duration))
+				g.showFlashLight = false
+			}()
 		case SnakeCmd:
 			if key.args[0] == "start" && !g.gameRunning {
 				g.snakeGame.reset()
@@ -292,7 +321,7 @@ func (g *Game) Update() {
 				if err != nil {
 					break
 				}
-				visuals.SetLightsColor(color)
+				go visuals.SetLightsColor(color)
 			}
 		case ErrorCmd:
 			g.errorManager.AddError(5)
@@ -414,6 +443,23 @@ func (g *Game) Draw() {
 	}
 	rl.EndMode3D()
 
+	mpos := rl.GetMousePosition()
+	if g.showFlashLight {
+		flx := int32(mpos.X) - 2560
+		if flx < -2560 {
+			flx = -2560
+		}
+		fly := int32(mpos.Y) - 1440
+		if fly < -1440 {
+			fly = -1440
+		}
+		rl.DrawTexture(flashLightImg, flx, fly, rl.White)
+	}
+
+	if g.bigMouse {
+		rl.DrawTexture(sprites[2], int32(mpos.X)-925, int32(mpos.Y)-1100, rl.White)
+	}
+
 	//	rl.DrawFPS(50, 50)
 
 	g.errorManager.Draw()
@@ -496,6 +542,7 @@ func main() {
 	mwhipImg = rl.LoadTexture("./images/mwhip.png")
 	mkImg = rl.LoadTexture("./images/mk.png")
 	carImg = rl.LoadTexture("./images/car.png")
+	flashLightImg = rl.LoadTexture("./images/flashlight.png")
 	LoadSprites()
 	shaders.LoadShaders()
 	visuals.LoadFollowAlertAssets()
@@ -544,7 +591,7 @@ func main() {
 	games.Load(screenWidth, screenHeight, game.connWriteChan)
 	defer games.Cleanup()
 	game.snakeGame = newSnake()
-	cube.LoadCubeAssets()
+	cube.LoadCubeAssets(game.connWriteChan)
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
@@ -616,7 +663,7 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	for scanner.Scan() {
 		txt := scanner.Text()
 		fields := strings.Fields(txt)
-		if len(fields) == 0 {
+		if len(fields) == 0 || fields[0] == "ping" {
 			continue
 		}
 		switch fields[0] {
@@ -642,7 +689,15 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 		case "killgophs":
 			c <- cmd{KillGophs, []string{}}
 		case "bigmouse":
-			c <- cmd{BigMouse, []string{}}
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{BigMouse, fields}
+		case "flashlight":
+			if len(fields) < 2 {
+				continue
+			}
+			c <- cmd{FlashLightCmd, fields}
 		case "snake":
 			if len(fields) < 2 {
 				continue
@@ -741,9 +796,13 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 			c <- cmd{RaidAlert, []string{}}
 		case "steam":
 			c <- cmd{SteamCmd, []string{}}
+		case "slots":
+			c <- cmd{GameCmd, fields}
 		}
 
-		fmt.Println(fields)
+		if isVerbose {
+			fmt.Println(fields)
+		}
 	}
 }
 

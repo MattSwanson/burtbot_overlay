@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,8 +19,6 @@ import (
 const (
 	cubeSize                   = 3 // X x X
 	lineSize     float32       = 3.0
-	drawOffsetX                = 150
-	drawOffsetY                = 950
 	shuffleDelay               = 1      // ms between moves
 	shuffleTime  time.Duration = 100000 // seconds
 )
@@ -33,46 +32,15 @@ var moveCount uint64
 var currentScore int
 var highScore int
 var drawSize float32 = 20
+var setDrawSize float32 = 20
 var movesFont rl.Font
+var writeChannel chan string
+var drawOffsetX float32 = 150
+var drawOffsetY float32 = 950
 
-func LoadCubeAssets() {
+func LoadCubeAssets(wc chan string) {
 	movesFont = rl.LoadFontEx("caskaydia.TTF", 72, nil)
-}
-
-func init() {
-	j, err := os.ReadFile("cube.json")
-	if err != nil {
-		log.Println("couldn't load cube save")
-		resetCube()
-		return
-	}
-	data := struct {
-		Front      []byte
-		Back       []byte
-		Left       []byte
-		Right      []byte
-		Top        []byte
-		Bottom     []byte
-		TotalMoves uint64
-		HighScore  int
-	}{}
-	err = json.Unmarshal(j, &data)
-	if err != nil {
-		log.Println("couldn't parse cube save")
-		resetCube()
-	}
-	c = &cube{
-		front:  data.Front,
-		back:   data.Back,
-		top:    data.Top,
-		bottom: data.Bottom,
-		left:   data.Left,
-		right:  data.Right,
-	}
-	moveCount = data.TotalMoves
-	highScore = data.HighScore
-	hasShuffled = false
-
+	writeChannel = wc
 }
 
 type cube struct {
@@ -102,13 +70,32 @@ func HandleCommand(args []string) {
 	case "movecount":
 		speech.Speak(fmt.Sprintf("BurtBot has made %d moves on the cube", moveCount), false, false)
 	case "start":
-		start()
+		start(args[1])
 	case "stop":
 		stop()
+		SaveCube()
 	case "reset":
 		resetCube()
 	case "shuffle":
 		shuffle()
+	case "pos":
+		// pos x y size
+		if len(args) < 4 {
+			return
+		}
+		newX, err := strconv.ParseFloat(args[1], 32)
+		if err != nil {
+			return
+		}
+		newY, err := strconv.ParseFloat(args[2], 32)
+		if err != nil {
+			return
+		}
+		newSize, err := strconv.ParseFloat(args[3], 32)
+		if err != nil {
+			return
+		}
+		drawOffsetX, drawOffsetY, setDrawSize = float32(newX), float32(newY), float32(newSize)
 	case "move":
 		if !running || len(args) < 2 {
 			return
@@ -590,10 +577,35 @@ func rotateSCCW() {
 		c.right[1], c.right[4], c.right[7], c.bottom[5], c.bottom[4], c.bottom[3], c.left[1], c.left[4], c.left[7], c.top[5], c.top[4], c.top[3]
 }
 
-func start() {
+func start(startingState string) {
 	if running {
 		return
 	}
+	data := struct {
+		Front      []byte
+		Back       []byte
+		Left       []byte
+		Right      []byte
+		Top        []byte
+		Bottom     []byte
+		TotalMoves uint64
+		HighScore  int
+	}{}
+	err := json.Unmarshal([]byte(startingState), &data)
+	if err != nil {
+		log.Println("couldn't parse cube save")
+		resetCube()
+	}
+	c = &cube{
+		front:  data.Front,
+		back:   data.Back,
+		top:    data.Top,
+		bottom: data.Bottom,
+		left:   data.Left,
+		right:  data.Right,
+	}
+	moveCount = data.TotalMoves
+	highScore = data.HighScore
 	running = true
 }
 
@@ -708,7 +720,7 @@ func getColor(b byte) rl.Color {
 }
 
 func shuffle() {
-	if randoCancelFunc != nil {
+	if randoCancelFunc != nil || !running {
 		return
 	}
 	var c context.Context
@@ -721,7 +733,7 @@ func shuffle() {
 				cubeLock.Unlock()
 				return
 			default:
-				drawSize = 20
+				drawSize = setDrawSize
 				r := rand.Intn(18)
 				switch r {
 				case 0:
@@ -768,7 +780,7 @@ func shuffle() {
 				}
 				var timeToWait time.Duration = 0
 				if currentScore == 48 {
-					drawSize = 120
+					drawSize = 150
 					sound.Play("indigo")
 					fmt.Println("OMG IT DEIFN THSK WHOW")
 					hasShuffled = true
@@ -798,6 +810,9 @@ func SaveCube() {
 	if randoCancelFunc != nil {
 		randoCancelFunc()
 	}
+	if c == nil {
+		return
+	}
 	data := struct {
 		Front      []byte
 		Back       []byte
@@ -818,6 +833,7 @@ func SaveCube() {
 		HighScore:  highScore,
 	}
 	json, _ := json.Marshal(data)
+	writeChannel <- fmt.Sprintf("cube %s\n", string(json))
 	if err := os.WriteFile("cube.json", json, 0644); err != nil {
 		log.Println(err.Error())
 	}

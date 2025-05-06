@@ -131,14 +131,11 @@ func (s *Snake) Update(currentInput int) error {
 				X: s.snakeBody[len(s.snakeBody)-1].X,
 				Y: s.snakeBody[len(s.snakeBody)-1].Y,
 			})
-			if len(s.snakeBody) > 10 && len(s.snakeBody) < 20 {
-				s.level = 2
-				s.moveTime = initialMoveSpeed - 5
-			} else if len(s.snakeBody) > 20 {
-				s.level = 3
-				s.moveTime = initialMoveSpeed - 10
-			} else {
-				s.level = 1
+
+			s.level = len(s.snakeBody)/5 + 1
+			s.moveTime = initialMoveSpeed - (s.level * 3)
+			if s.moveTime < 2 {
+				s.moveTime = 2
 			}
 			s.score++
 			if s.bestScore < s.score {
@@ -175,26 +172,20 @@ func (s *Snake) Update(currentInput int) error {
 
 func (s *Snake) Draw() {
 	for _, v := range s.snakeBody {
-		// ebitenutil.DrawRect(screen, float64(v.X*gridSize), float64(v.Y*gridSize), gridSize, gridSize, color.RGBA{0x00, 0xff, 0x00, 0xff})
 		rl.DrawRectangle(int32(v.X*gridSize), int32(v.Y*gridSize), gridSize, gridSize, rl.Color{R: 0x00, G: 0xff, B: 0x00, A: 0xff})
 	}
-	// ebitenutil.DrawRect(screen, float64(s.apple.X*gridSize), float64(s.apple.Y*gridSize), gridSize, gridSize, color.RGBA{0xFF, 0x00, 0x00, 0xff})
 	rl.DrawRectangle(int32(s.apple.X*gridSize), int32(s.apple.Y*gridSize), gridSize, gridSize, rl.Color{R: 0xff, G: 0x00, B: 0x00, A: 0xff})
 	if s.moveDirection == dirNone {
 		instStr := "w, a, s or d to start"
 		b := rl.MeasureTextEx(rl.GetFontDefault(), instStr, 96, 0)
 		textX := screenWidth/2 - b.X/2
 		textY := screenHeight/2 - b.Y/2
-		//text.Draw(screen, instStr, myFont, textX, textY, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 		rl.DrawText(instStr, int32(textX), int32(textY), 96, rl.White)
 		rl.DrawText(instStr, int32(textX+1), int32(textY+1), 96, rl.Green)
-		//text.Draw(screen, instStr, myFont, textX+1, textY+1, color.RGBA{0, 0xFF, 0, 0xFF})
 	} else {
 		s := fmt.Sprintf("Level: %d Score: %d Best Score: %d", s.level, s.score, s.bestScore)
-		//text.Draw(screen, s, myFont, 25, 25, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
 		rl.DrawText(s, 25, 25, 96, rl.White)
 		rl.DrawText(s, 26, 26, 96, rl.Green)
-		//text.Draw(screen, s, myFont, 25, 25, color.RGBA{0, 0xFF, 0, 0xFF})
 	}
 }
 
