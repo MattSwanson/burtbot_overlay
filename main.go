@@ -31,7 +31,7 @@ import (
 	"github.com/andreykaipov/goobs"
 	"github.com/andreykaipov/goobs/api/requests/sceneitems"
 	"github.com/andreykaipov/goobs/api/requests/scenes"
-    "github.com/andreykaipov/goobs/api/requests/stream"
+	"github.com/andreykaipov/goobs/api/requests/stream"
 	"golang.org/x/net/context"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -92,11 +92,11 @@ const (
 	npTextTopY    = 10
 	npTextBottomY = 1375
 
-    brbSceneLiveBirds = "brb_live_birds"
-    brbScene = "birb"
+	brbSceneLiveBirds = "brb_live_birds"
+	brbScene          = "birb"
 
-    noSignalSceneLiveBirds = "no_signal_live_birds"
-    noSignalScene = "no_signal"
+	noSignalSceneLiveBirds = "no_signal_live_birds"
+	noSignalScene          = "no_signal"
 )
 
 var hasLiveBirds bool
@@ -158,6 +158,14 @@ type cmd struct {
 	command int
 	args    []string
 }
+
+var NilCmd = cmd{-1, []string{}}
+
+const (
+	CmdErrNotEnoughArgs = iota
+	CmdErrInvalidArgs
+	CmdErrInvalidCommand
+)
 
 const (
 	SpawnGopher = iota
@@ -374,7 +382,7 @@ func (g *Game) Update() {
 		case ToggleFSInfoCmd:
 			g.showFSInfo = !g.showFSInfo
 		//case FSCmd:
-			//visuals.HandleFSCmd(key.args)
+		//visuals.HandleFSCmd(key.args)
 		case StreamCmd:
 			if key.args[0] == "start" {
 				startStreamWS()
@@ -383,11 +391,11 @@ func (g *Game) Update() {
 			} else if key.args[0] == "flip" {
 				flipStreamCamera()
 			} else if key.args[0] == "scene" {
-               if len(key.args) < 2 {
-                   return
-               }
-               setOBSScene(key.args[1])
-           }
+				if len(key.args) < 2 {
+					return
+				}
+				setOBSScene(key.args[1])
+			}
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
 				visuals.EnableMetrics(true)
@@ -486,8 +494,8 @@ func (g *Game) Draw() {
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
 	/*if g.showFSInfo {
-		//visuals.DrawFSInfo()
-    }*/
+			//visuals.DrawFSInfo()
+	    }*/
 	visuals.DrawSteamOverlay()
 
 	visuals.DrawMarquees()
@@ -618,6 +626,23 @@ func main() {
 		}()
 	}
 
+	// Listen on stdin so we can directly input
+	// commands for testing or other control
+	go func(c chan cmd) {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			s := scanner.Text()
+			if strings.HasPrefix(s, "cmd") {
+				cmd, err := parseCommandFromString(strings.TrimPrefix(s, "cmd"))
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				c <- cmd
+			}
+		}
+	}(game.commChannel)
+
 	for !rl.WindowShouldClose() {
 		game.Update()
 		game.Draw()
@@ -662,148 +687,175 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		txt := scanner.Text()
-		fields := strings.Fields(txt)
-		if len(fields) == 0 || fields[0] == "ping" {
+		if txt == "" || strings.HasPrefix(strings.TrimSpace(txt), "ping") {
 			continue
 		}
-		switch fields[0] {
-		case "up":
-			c <- cmd{int(rl.KeyUp), []string{}}
-		case "down":
-			c <- cmd{int(rl.KeyDown), []string{}}
-		case "left":
-			c <- cmd{int(rl.KeyLeft), []string{}}
-		case "right":
-			c <- cmd{int(rl.KeyRight), []string{}}
-		case "spawngo":
-			arg := "1"
-			if len(fields) > 1 {
-				arg = fields[1]
-			}
-			c <- cmd{SpawnGopher, []string{arg}}
-		case "quack":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{Quack, fields[1:]}
-		case "killgophs":
-			c <- cmd{KillGophs, []string{}}
-		case "bigmouse":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BigMouse, fields}
-		case "flashlight":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{FlashLightCmd, fields}
-		case "snake":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{SnakeCmd, fields[1:]}
-		case "marquee":
-			if fields[1] == "off" {
-				c <- cmd{MarqueeCmd, []string{"off"}}
-			}
-			if len(fields) < 3 {
-				continue
-			}
-			if fields[1] == "set" {
-				c <- cmd{MarqueeCmd, []string{txt[12:]}}
-			} else if fields[1] == "once" {
-				c <- cmd{SingleMarqueeCmd, []string{txt[12:]}}
-			}
-		case "tts":
-			if len(fields) < 4 {
-				continue
-			}
-			c <- cmd{TTS, []string{strings.Join(fields[3:], " "), fields[1], fields[2]}}
-		case "plinko":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{GameCmd, fields}
-		case "tanks":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{GameCmd, fields}
-		case "bop":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BopCmd, fields[1:]}
-		case "miracle":
-			c <- cmd{MiracleCmd, []string{}}
-		case "mk":
-			c <- cmd{MKCmd, []string{}}
-		case "lo":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)} //hacky
-		case "bingo":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BingoCmd, fields[1:]}
-			// j := fmt.Sprintf(`{"RawMessage":"%s", "Emotes":""}`, fields[2])
-			// c <- cmd{SingleMarqueeCmd, []string{j}}
-		case "lights":
-			if len(fields) < 3 {
-				continue
-			}
-			c <- cmd{LightsCmd, fields[1:]}
-		case "error":
-			c <- cmd{ErrorCmd, []string{}}
-		case "quacksplosion":
-			c <- cmd{Quacksplosion, []string{}}
-		case "newfollow":
-			c <- cmd{FollowAlert, fields[1:]}
-		case "ded":
-			c <- cmd{DedCmd, fields[1:]}
-		case "cube":
-			c <- cmd{CubeCmd, fields[1:]}
-		case "tux":
-			c <- cmd{TuxCmd, []string{}}
-		case "nowplaying":
-			c <- cmd{NowPlayingCmd, []string{strings.Join(fields[1:], " ")}}
-		case "nptext":
-			c <- cmd{NpTextCmd, fields[1:]}
-		case "moo":
-			c <- cmd{MooCmd, []string{}}
-		case "itemdrops":
-			c <- cmd{DropsCmd, []string{txt[10:]}}
-		case "dmtoggle":
-			c <- cmd{DMCmd, []string{}}
-		case "fsToggle":
-			c <- cmd{ToggleFSInfoCmd, []string{}}
-		case "fs":
-			c <- cmd{FSCmd, fields[1:]}
-		case "stream":
-			c <- cmd{StreamCmd, fields[1:]}
-		case "hr":
-			fallthrough
-		case "cars":
-			fallthrough
-		case "speed":
-			fallthrough
-		case "distance":
-			c <- cmd{MetricsCmd, fields}
-		case "raidincoming":
-			c <- cmd{RaidAlert, []string{}}
-		case "steam":
-			c <- cmd{SteamCmd, []string{}}
-		case "slots":
-			c <- cmd{GameCmd, fields}
+
+		cmd, err := parseCommandFromString(txt)
+		if err != nil {
+			log.Println(err)
+			continue
 		}
 
-		if isVerbose {
-			fmt.Println(fields)
-		}
+		c <- cmd
+
 	}
+}
+
+func cmdErr(name string, errType int) (cmd, error) {
+	errString := ""
+	switch errType {
+	case CmdErrNotEnoughArgs:
+		errString = "Not enough args."
+	case CmdErrInvalidArgs:
+		errString = "Invalid arguments."
+	case CmdErrInvalidCommand:
+		errString = "Invalid command."
+	}
+	err := fmt.Errorf("%s - %s", name, errString)
+	return NilCmd, err
+}
+
+// parseCommandFromString reads an input string
+// and creates a cmd used to send to the
+// command handler
+func parseCommandFromString(s string) (cmd, error) {
+	fields := strings.Fields(s)
+	if isVerbose {
+		fmt.Println(fields)
+	}
+	switch fields[0] {
+	case "up":
+		return cmd{int(rl.KeyUp), []string{}}, nil
+	case "down":
+		return cmd{int(rl.KeyDown), []string{}}, nil
+	case "left":
+		return cmd{int(rl.KeyLeft), []string{}}, nil
+	case "right":
+		return cmd{int(rl.KeyRight), []string{}}, nil
+	case "spawngo":
+		arg := "1"
+		if len(fields) > 1 {
+			arg = fields[1]
+		}
+		return cmd{SpawnGopher, []string{arg}}, nil
+	case "quack":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{Quack, fields[1:]}, nil
+	case "killgophs":
+		return cmd{KillGophs, []string{}}, nil
+	case "bigmouse":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{BigMouse, fields}, nil
+	case "flashlight":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{FlashLightCmd, fields}, nil
+	case "snake":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{SnakeCmd, fields[1:]}, nil
+	case "marquee":
+		if fields[1] == "off" {
+			return cmd{MarqueeCmd, []string{"off"}}, nil
+		}
+		if len(fields) < 3 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		if fields[1] == "set" {
+			return cmd{MarqueeCmd, []string{s[12:]}}, nil
+		} else if fields[1] == "once" {
+			return cmd{SingleMarqueeCmd, []string{s[12:]}}, nil
+		}
+	case "tts":
+		if len(fields) < 4 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{TTS, []string{strings.Join(fields[3:], " "), fields[1], fields[2]}}, nil
+	case "plinko":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{GameCmd, fields}, nil
+	case "tanks":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{GameCmd, fields}, nil
+	case "bop":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{BopCmd, fields[1:]}, nil
+	case "miracle":
+		return cmd{MiracleCmd, []string{}}, nil
+	case "mk":
+		return cmd{MKCmd, []string{}}, nil
+	case "lo":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)}, nil //hacky
+	case "bingo":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{BingoCmd, fields[1:]}, nil
+	case "lights":
+		if len(fields) < 3 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{LightsCmd, fields[1:]}, nil
+	case "error":
+		return cmd{ErrorCmd, []string{}}, nil
+	case "quacksplosion":
+		return cmd{Quacksplosion, []string{}}, nil
+	case "newfollow":
+		return cmd{FollowAlert, fields[1:]}, nil
+	case "ded":
+		return cmd{DedCmd, fields[1:]}, nil
+	case "cube":
+		return cmd{CubeCmd, fields[1:]}, nil
+	case "tux":
+		return cmd{TuxCmd, []string{}}, nil
+	case "nowplaying":
+		return cmd{NowPlayingCmd, []string{strings.Join(fields[1:], " ")}}, nil
+	case "nptext":
+		return cmd{NpTextCmd, fields[1:]}, nil
+	case "moo":
+		return cmd{MooCmd, []string{}}, nil
+	case "itemdrops":
+		return cmd{DropsCmd, []string{s[10:]}}, nil
+	case "dmtoggle":
+		return cmd{DMCmd, []string{}}, nil
+	case "fsToggle":
+		return cmd{ToggleFSInfoCmd, []string{}}, nil
+	case "fs":
+		return cmd{FSCmd, fields[1:]}, nil
+	case "stream":
+		return cmd{StreamCmd, fields[1:]}, nil
+	case "hr":
+		fallthrough
+	case "cars":
+		fallthrough
+	case "speed":
+		fallthrough
+	case "distance":
+		return cmd{MetricsCmd, fields}, nil
+	case "raidincoming":
+		return cmd{RaidAlert, []string{}}, nil
+	case "steam":
+		return cmd{SteamCmd, []string{}}, nil
+	case "slots":
+		return cmd{GameCmd, fields}, nil
+	}
+	return cmdErr("Handler", CmdErrInvalidCommand)
 }
 
 func handleWrites(ctx context.Context, conn *net.Conn, wc chan string) {
@@ -898,8 +950,8 @@ func startStreamFull() bool {
 		return false
 	}
 	fmt.Println("attempting stream start")
-    cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
-    currentScene = "outdoors"
+	cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
+	currentScene = "outdoors"
 	if err := cmd.Start(); err != nil {
 		log.Println(err)
 		return false
@@ -910,39 +962,39 @@ func startStreamFull() bool {
 }
 
 func startStreamWS() bool {
-    if goobsClient == nil {
-        return false
-    }
-    params := stream.StartStreamParams{}
-    _, err := goobsClient.Stream.StartStream(&params)
-    if err != nil {
-        return false
-    }
-    return true
+	if goobsClient == nil {
+		return false
+	}
+	params := stream.StartStreamParams{}
+	_, err := goobsClient.Stream.StartStream(&params)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func connectToOBSWS() error {
-    if goobsClient != nil {
-        return nil 
-    }
-    var err error
-    goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
-    if err != nil {
-        log.Println("Couldn't connect to OBSWS - ", err.Error())
-        speech.Speak("couldn't conntect to OBSWS...", true, false)
-    }
-    return nil
+	if goobsClient != nil {
+		return nil
+	}
+	var err error
+	goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
+	if err != nil {
+		log.Println("Couldn't connect to OBSWS - ", err.Error())
+		speech.Speak("couldn't conntect to OBSWS...", true, false)
+	}
+	return nil
 }
 
 func stopStreamWS() bool {
-    if goobsClient == nil {
-        return false
-    }
-    _, err := goobsClient.Stream.StopStream(&stream.StopStreamParams{})
-    if err != nil {
-        return false
-    }
-    return true
+	if goobsClient == nil {
+		return false
+	}
+	_, err := goobsClient.Stream.StopStream(&stream.StopStreamParams{})
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // keeping here for now
@@ -961,51 +1013,51 @@ func stopStreamOld() {
 // and if we find a publisher, call this function manually??
 func goProConnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro connected", true, false)
-    if goobsClient != nil {
-        params := scenes.NewSetCurrentProgramSceneParams().
-            WithSceneName("outdoors")
-        goobsClient.Scenes.SetCurrentProgramScene(params)
-        currentScene = "outdoors"
-    }
-    if streamHealthCancelFunc != nil {
-        // if we already have a health check running and
-        // it didn't close properly, don't start another
-        fmt.Fprintf(w, "got it\n")
-        return
-    }
-    ctx, cancelFunc := context.WithCancel(context.Background())
-    streamHealthCancelFunc = cancelFunc
-    go func(ctx context.Context) {
-        fmt.Println("starting health check llooolp")
-        ticker := time.NewTicker(time.Second * 3)
-        defer ticker.Stop()
-        for {
-            select {
-            case <-ctx.Done():
-                return
-            case <-ticker.C:
-                fmt.Println("tick")
-                checkGoProStreamHealth()
-            }
-        }
-    }(ctx)
+	if goobsClient != nil {
+		params := scenes.NewSetCurrentProgramSceneParams().
+			WithSceneName("outdoors")
+		goobsClient.Scenes.SetCurrentProgramScene(params)
+		currentScene = "outdoors"
+	}
+	if streamHealthCancelFunc != nil {
+		// if we already have a health check running and
+		// it didn't close properly, don't start another
+		fmt.Fprintf(w, "got it\n")
+		return
+	}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	streamHealthCancelFunc = cancelFunc
+	go func(ctx context.Context) {
+		fmt.Println("starting health check llooolp")
+		ticker := time.NewTicker(time.Second * 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fmt.Println("tick")
+				checkGoProStreamHealth()
+			}
+		}
+	}(ctx)
 	fmt.Fprintf(w, "got it\n")
 }
 
 func goProDisconnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro disconnected", true, false)
-    if streamHealthCancelFunc != nil {
-        // Clean up any stream health checks
-        newScene := noSignalScene
-        if hasLiveBirds {
-            newScene = noSignalSceneLiveBirds
-        }
-        params := scenes.NewSetCurrentProgramSceneParams().
-            WithSceneName(newScene)
-        goobsClient.Scenes.SetCurrentProgramScene(params)
-        currentScene = newScene
-        streamHealthCancelFunc()
-    }
+	if streamHealthCancelFunc != nil {
+		// Clean up any stream health checks
+		newScene := noSignalScene
+		if hasLiveBirds {
+			newScene = noSignalSceneLiveBirds
+		}
+		params := scenes.NewSetCurrentProgramSceneParams().
+			WithSceneName(newScene)
+		goobsClient.Scenes.SetCurrentProgramScene(params)
+		currentScene = newScene
+		streamHealthCancelFunc()
+	}
 	fmt.Fprintf(w, "go it\n")
 }
 
@@ -1031,118 +1083,118 @@ func checkGoProStreamHealth() {
 		return
 	}
 
-    fmt.Println("steam heltj chekc sone")
-    // Check to see if we have any active streams
-    // If not, change scene to our lost signal stream
-    // we can check for application outdoor having a client with state: publishing
-    for _, app := range respStruct.Apps {
-        if app.Name == "outdoor" {
-            if len(app.Publishing) == 0 {
-                // No publishing - lost signal
-                // should be covered by go pro disc event?
-                fmt.Println("No stream publisher found - ??")
-                continue
-            }
-            if app.BitRate < 1800000 {
-                //Low bitrate - maybe change scenes
-                // or show low bitrate warning, see what we can
-                // do over websocket
-                fmt.Println("---- Stream below bitrate threshold -----", app.BitRate)
-            }
-            fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
-        }
+	fmt.Println("steam heltj chekc sone")
+	// Check to see if we have any active streams
+	// If not, change scene to our lost signal stream
+	// we can check for application outdoor having a client with state: publishing
+	for _, app := range respStruct.Apps {
+		if app.Name == "outdoor" {
+			if len(app.Publishing) == 0 {
+				// No publishing - lost signal
+				// should be covered by go pro disc event?
+				fmt.Println("No stream publisher found - ??")
+				continue
+			}
+			if app.BitRate < 1800000 {
+				//Low bitrate - maybe change scenes
+				// or show low bitrate warning, see what we can
+				// do over websocket
+				fmt.Println("---- Stream below bitrate threshold -----", app.BitRate)
+			}
+			fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
+		}
 
-        if app.Name == "live" {
-            if hasLiveBirds && app.BitRate < 1000000 {
-                // if bitrate is lower than this, then the camera is not
-                // in live view
-                fmt.Println("lost live bird cam")
-                hasLiveBirds = false
-                switch currentScene {
-                case "no_signal_live_birds":
-                    setOBSScene("no_signal")
-                case "brb_live_birds":
-                    setOBSScene("birb")
-                }
-            }
+		if app.Name == "live" {
+			if hasLiveBirds && app.BitRate < 1000000 {
+				// if bitrate is lower than this, then the camera is not
+				// in live view
+				fmt.Println("lost live bird cam")
+				hasLiveBirds = false
+				switch currentScene {
+				case "no_signal_live_birds":
+					setOBSScene("no_signal")
+				case "brb_live_birds":
+					setOBSScene("birb")
+				}
+			}
 
-            if !hasLiveBirds && app.BitRate >= 1000000 {
-                // live bird feed is back
-                fmt.Println("live birds are back")
-                hasLiveBirds = true
-                switch currentScene {
-                case "no_signal":
-                    setOBSScene("no_signal_live_birds")
-                case "birb":
-                    setOBSScene("brb_live_birds")
-                }
-            }
-        }
-    }
+			if !hasLiveBirds && app.BitRate >= 1000000 {
+				// live bird feed is back
+				fmt.Println("live birds are back")
+				hasLiveBirds = true
+				switch currentScene {
+				case "no_signal":
+					setOBSScene("no_signal_live_birds")
+				case "birb":
+					setOBSScene("brb_live_birds")
+				}
+			}
+		}
+	}
 }
 
 func setLiveBirdCamVisibility(visible bool) {
-    // set the live bird cam visibility 
-    // based on if we have it or not, 
-    // so we can see the bird video
+	// set the live bird cam visibility
+	// based on if we have it or not,
+	// so we can see the bird video
 
-    // maybe we just set another scene with live bird for now
-    
+	// maybe we just set another scene with live bird for now
+
 }
 
 func setOBSScene(sceneName string) {
-    if goobsClient == nil {
-        connectToOBSWS()
-    }
-    // check to see if we have live birds if setting certain scenes
-    if hasLiveBirds {
-        switch sceneName {
-        case "no_signal":
-            sceneName = noSignalSceneLiveBirds
-        case "birb":
-            sceneName = brbSceneLiveBirds
-        }
-    }
-    params := scenes.NewSetCurrentProgramSceneParams().
-        WithSceneName(sceneName)
-    _, err := goobsClient.Scenes.SetCurrentProgramScene(params)
-    if err != nil {
-        fmt.Println("Error switch scene: ", err)
-        return
-    }
-    currentScene = sceneName
+	if goobsClient == nil {
+		connectToOBSWS()
+	}
+	// check to see if we have live birds if setting certain scenes
+	if hasLiveBirds {
+		switch sceneName {
+		case "no_signal":
+			sceneName = noSignalSceneLiveBirds
+		case "birb":
+			sceneName = brbSceneLiveBirds
+		}
+	}
+	params := scenes.NewSetCurrentProgramSceneParams().
+		WithSceneName(sceneName)
+	_, err := goobsClient.Scenes.SetCurrentProgramScene(params)
+	if err != nil {
+		fmt.Println("Error switch scene: ", err)
+		return
+	}
+	currentScene = sceneName
 }
 
 func flipStreamCamera() {
-    
-    /*prams := sceneitems.NewGetSceneItemListParams().
-        WithSceneName("outdoors")
-    r, err := goobsClient.SceneItems.GetSceneItemList(prams)
-    if err != nil {
-        fmt.Println("error getting scene item list", err.Error())
-        return
-    }
-    for _, v := range r.SceneItems {
-        fmt.Printf("Scene ID: %d - Source Name: %s\n", v.SceneItemID, v.SourceName)
-    }*/
-    gsitParams := sceneitems.NewGetSceneItemTransformParams().
-        WithSceneName("outdoors").
-        WithSceneItemId(1)
-    gsitResp, err := goobsClient.SceneItems.GetSceneItemTransform(gsitParams)
-    if err != nil {
-        fmt.Println("Error getting transform ", err.Error())
-        return
-    }
-    newTransform := gsitResp.SceneItemTransform
-    newTransform.Rotation = float64(int(newTransform.Rotation + 180) % 360)
-    params := sceneitems.NewSetSceneItemTransformParams().
-        WithSceneName("outdoors").
-        WithSceneItemId(1).
-        WithSceneItemTransform(newTransform)
-    _, err = goobsClient.SceneItems.SetSceneItemTransform(params)
-    if err != nil {
-        fmt.Println("Error setting transform ", err.Error())
-    }
+
+	/*prams := sceneitems.NewGetSceneItemListParams().
+	      WithSceneName("outdoors")
+	  r, err := goobsClient.SceneItems.GetSceneItemList(prams)
+	  if err != nil {
+	      fmt.Println("error getting scene item list", err.Error())
+	      return
+	  }
+	  for _, v := range r.SceneItems {
+	      fmt.Printf("Scene ID: %d - Source Name: %s\n", v.SceneItemID, v.SourceName)
+	  }*/
+	gsitParams := sceneitems.NewGetSceneItemTransformParams().
+		WithSceneName("outdoors").
+		WithSceneItemId(1)
+	gsitResp, err := goobsClient.SceneItems.GetSceneItemTransform(gsitParams)
+	if err != nil {
+		fmt.Println("Error getting transform ", err.Error())
+		return
+	}
+	newTransform := gsitResp.SceneItemTransform
+	newTransform.Rotation = float64(int(newTransform.Rotation+180) % 360)
+	params := sceneitems.NewSetSceneItemTransformParams().
+		WithSceneName("outdoors").
+		WithSceneItemId(1).
+		WithSceneItemTransform(newTransform)
+	_, err = goobsClient.SceneItems.SetSceneItemTransform(params)
+	if err != nil {
+		fmt.Println("Error setting transform ", err.Error())
+	}
 }
 
 func getCodePointsFromString(s string) []rune {
