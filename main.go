@@ -31,6 +31,7 @@ import (
 	"github.com/andreykaipov/goobs"
 	"github.com/andreykaipov/goobs/api/requests/sceneitems"
 	"github.com/andreykaipov/goobs/api/requests/scenes"
+	"github.com/andreykaipov/goobs/api/requests/stream"
 	"golang.org/x/net/context"
 
 	rl "github.com/MattSwanson/raylib-go/raylib"
@@ -90,8 +91,16 @@ const (
 
 	npTextTopY    = 10
 	npTextBottomY = 1375
+
+	brbSceneLiveBirds = "brb_live_birds"
+	brbScene          = "birb"
+
+	noSignalSceneLiveBirds = "no_signal_live_birds"
+	noSignalScene          = "no_signal"
 )
 
+var hasLiveBirds bool
+var currentScene = "outdoors"
 var goobsClient *goobs.Client
 var streamHealthCancelFunc context.CancelFunc
 
@@ -149,6 +158,14 @@ type cmd struct {
 	command int
 	args    []string
 }
+
+var NilCmd = cmd{-1, []string{}}
+
+const (
+	CmdErrNotEnoughArgs = iota
+	CmdErrInvalidArgs
+	CmdErrInvalidCommand
+)
 
 const (
 	SpawnGopher = iota
@@ -364,15 +381,20 @@ func (g *Game) Update() {
 			g.showDM = !g.showDM
 		case ToggleFSInfoCmd:
 			g.showFSInfo = !g.showFSInfo
-		case FSCmd:
-			visuals.HandleFSCmd(key.args)
+		//case FSCmd:
+		//visuals.HandleFSCmd(key.args)
 		case StreamCmd:
 			if key.args[0] == "start" {
-				startStream()
+				startStreamWS()
 			} else if key.args[0] == "stop" {
-				stopStream()
+				stopStreamWS()
 			} else if key.args[0] == "flip" {
 				flipStreamCamera()
+			} else if key.args[0] == "scene" {
+				if len(key.args) < 2 {
+					return
+				}
+				setOBSScene(key.args[1])
 			}
 		case MetricsCmd:
 			if !visuals.MetricsEnabled() {
@@ -471,9 +493,9 @@ func (g *Game) Draw() {
 	cube.Draw()
 	visuals.DrawDrops()
 	visuals.DrawFollowAlert()
-	if g.showFSInfo {
-		visuals.DrawFSInfo()
-	}
+	/*if g.showFSInfo {
+			//visuals.DrawFSInfo()
+	    }*/
 	visuals.DrawSteamOverlay()
 
 	visuals.DrawMarquees()
@@ -534,7 +556,7 @@ func main() {
 	visuals.LoadFollowAlertAssets()
 	visuals.LoadBopometerAssets()
 	visuals.LoadDropsAssets()
-	visuals.LoadFSAssets()
+	//visuals.LoadFSAssets()
 	visuals.InitMetrics()
 	ga.commChannel = make(chan cmd)
 	ga.connWriteChan = make(chan string)
@@ -581,9 +603,9 @@ func main() {
 	game.bopometer = visuals.NewBopometer(game.connWriteChan)
 	game.bingoOverlay = visuals.NewBingoOverlay()
 	game.errorManager = visuals.NewErrorManager()
-	if err := visuals.PollFS(); err != nil {
+	/*if err := visuals.PollFS(); err != nil {
 		fmt.Println("Couldn't connect to sim")
-	}
+	}*/
 
 	goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
 	if err != nil {
@@ -603,6 +625,23 @@ func main() {
 			}
 		}()
 	}
+
+	// Listen on stdin so we can directly input
+	// commands for testing or other control
+	go func(c chan cmd) {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			s := scanner.Text()
+			if strings.HasPrefix(s, "cmd") {
+				cmd, err := parseCommandFromString(strings.TrimPrefix(s, "cmd"))
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				c <- cmd
+			}
+		}
+	}(game.commChannel)
 
 	for !rl.WindowShouldClose() {
 		game.Update()
@@ -648,148 +687,175 @@ func handleConnection(conn net.Conn, c chan cmd, wc chan string) {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		txt := scanner.Text()
-		fields := strings.Fields(txt)
-		if len(fields) == 0 || fields[0] == "ping" {
+		if txt == "" || strings.HasPrefix(strings.TrimSpace(txt), "ping") {
 			continue
 		}
-		switch fields[0] {
-		case "up":
-			c <- cmd{int(rl.KeyUp), []string{}}
-		case "down":
-			c <- cmd{int(rl.KeyDown), []string{}}
-		case "left":
-			c <- cmd{int(rl.KeyLeft), []string{}}
-		case "right":
-			c <- cmd{int(rl.KeyRight), []string{}}
-		case "spawngo":
-			arg := "1"
-			if len(fields) > 1 {
-				arg = fields[1]
-			}
-			c <- cmd{SpawnGopher, []string{arg}}
-		case "quack":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{Quack, fields[1:]}
-		case "killgophs":
-			c <- cmd{KillGophs, []string{}}
-		case "bigmouse":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BigMouse, fields}
-		case "flashlight":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{FlashLightCmd, fields}
-		case "snake":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{SnakeCmd, fields[1:]}
-		case "marquee":
-			if fields[1] == "off" {
-				c <- cmd{MarqueeCmd, []string{"off"}}
-			}
-			if len(fields) < 3 {
-				continue
-			}
-			if fields[1] == "set" {
-				c <- cmd{MarqueeCmd, []string{txt[12:]}}
-			} else if fields[1] == "once" {
-				c <- cmd{SingleMarqueeCmd, []string{txt[12:]}}
-			}
-		case "tts":
-			if len(fields) < 4 {
-				continue
-			}
-			c <- cmd{TTS, []string{strings.Join(fields[3:], " "), fields[1], fields[2]}}
-		case "plinko":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{GameCmd, fields}
-		case "tanks":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{GameCmd, fields}
-		case "bop":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BopCmd, fields[1:]}
-		case "miracle":
-			c <- cmd{MiracleCmd, []string{}}
-		case "mk":
-			c <- cmd{MKCmd, []string{}}
-		case "lo":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)} //hacky
-		case "bingo":
-			if len(fields) < 2 {
-				continue
-			}
-			c <- cmd{BingoCmd, fields[1:]}
-			// j := fmt.Sprintf(`{"RawMessage":"%s", "Emotes":""}`, fields[2])
-			// c <- cmd{SingleMarqueeCmd, []string{j}}
-		case "lights":
-			if len(fields) < 3 {
-				continue
-			}
-			c <- cmd{LightsCmd, fields[1:]}
-		case "error":
-			c <- cmd{ErrorCmd, []string{}}
-		case "quacksplosion":
-			c <- cmd{Quacksplosion, []string{}}
-		case "newfollow":
-			c <- cmd{FollowAlert, fields[1:]}
-		case "ded":
-			c <- cmd{DedCmd, fields[1:]}
-		case "cube":
-			c <- cmd{CubeCmd, fields[1:]}
-		case "tux":
-			c <- cmd{TuxCmd, []string{}}
-		case "nowplaying":
-			c <- cmd{NowPlayingCmd, []string{strings.Join(fields[1:], " ")}}
-		case "nptext":
-			c <- cmd{NpTextCmd, fields[1:]}
-		case "moo":
-			c <- cmd{MooCmd, []string{}}
-		case "itemdrops":
-			c <- cmd{DropsCmd, []string{txt[10:]}}
-		case "dmtoggle":
-			c <- cmd{DMCmd, []string{}}
-		case "fsToggle":
-			c <- cmd{ToggleFSInfoCmd, []string{}}
-		case "fs":
-			c <- cmd{FSCmd, fields[1:]}
-		case "stream":
-			c <- cmd{StreamCmd, fields[1:]}
-		case "hr":
-			fallthrough
-		case "cars":
-			fallthrough
-		case "speed":
-			fallthrough
-		case "distance":
-			c <- cmd{MetricsCmd, fields}
-		case "raidincoming":
-			c <- cmd{RaidAlert, []string{}}
-		case "steam":
-			c <- cmd{SteamCmd, []string{}}
-		case "slots":
-			c <- cmd{GameCmd, fields}
+
+		cmd, err := parseCommandFromString(txt)
+		if err != nil {
+			log.Println(err)
+			continue
 		}
 
-		if isVerbose {
-			fmt.Println(fields)
-		}
+		c <- cmd
+
 	}
+}
+
+func cmdErr(name string, errType int) (cmd, error) {
+	errString := ""
+	switch errType {
+	case CmdErrNotEnoughArgs:
+		errString = "Not enough args."
+	case CmdErrInvalidArgs:
+		errString = "Invalid arguments."
+	case CmdErrInvalidCommand:
+		errString = "Invalid command."
+	}
+	err := fmt.Errorf("%s - %s", name, errString)
+	return NilCmd, err
+}
+
+// parseCommandFromString reads an input string
+// and creates a cmd used to send to the
+// command handler
+func parseCommandFromString(s string) (cmd, error) {
+	fields := strings.Fields(s)
+	if isVerbose {
+		fmt.Println(fields)
+	}
+	switch fields[0] {
+	case "up":
+		return cmd{int(rl.KeyUp), []string{}}, nil
+	case "down":
+		return cmd{int(rl.KeyDown), []string{}}, nil
+	case "left":
+		return cmd{int(rl.KeyLeft), []string{}}, nil
+	case "right":
+		return cmd{int(rl.KeyRight), []string{}}, nil
+	case "spawngo":
+		arg := "1"
+		if len(fields) > 1 {
+			arg = fields[1]
+		}
+		return cmd{SpawnGopher, []string{arg}}, nil
+	case "quack":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{Quack, fields[1:]}, nil
+	case "killgophs":
+		return cmd{KillGophs, []string{}}, nil
+	case "bigmouse":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{BigMouse, fields}, nil
+	case "flashlight":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{FlashLightCmd, fields}, nil
+	case "snake":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{SnakeCmd, fields[1:]}, nil
+	case "marquee":
+		if fields[1] == "off" {
+			return cmd{MarqueeCmd, []string{"off"}}, nil
+		}
+		if len(fields) < 3 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		if fields[1] == "set" {
+			return cmd{MarqueeCmd, []string{s[12:]}}, nil
+		} else if fields[1] == "once" {
+			return cmd{SingleMarqueeCmd, []string{s[12:]}}, nil
+		}
+	case "tts":
+		if len(fields) < 4 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{TTS, []string{strings.Join(fields[3:], " "), fields[1], fields[2]}}, nil
+	case "plinko":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{GameCmd, fields}, nil
+	case "tanks":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{GameCmd, fields}, nil
+	case "bop":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{BopCmd, fields[1:]}, nil
+	case "miracle":
+		return cmd{MiracleCmd, []string{}}, nil
+	case "mk":
+		return cmd{MKCmd, []string{}}, nil
+	case "lo":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{GameCmd, append([]string{"lightsout"}, fields[1:]...)}, nil //hacky
+	case "bingo":
+		if len(fields) < 2 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{BingoCmd, fields[1:]}, nil
+	case "lights":
+		if len(fields) < 3 {
+			return cmdErr(fields[0], CmdErrNotEnoughArgs)
+		}
+		return cmd{LightsCmd, fields[1:]}, nil
+	case "error":
+		return cmd{ErrorCmd, []string{}}, nil
+	case "quacksplosion":
+		return cmd{Quacksplosion, []string{}}, nil
+	case "newfollow":
+		return cmd{FollowAlert, fields[1:]}, nil
+	case "ded":
+		return cmd{DedCmd, fields[1:]}, nil
+	case "cube":
+		return cmd{CubeCmd, fields[1:]}, nil
+	case "tux":
+		return cmd{TuxCmd, []string{}}, nil
+	case "nowplaying":
+		return cmd{NowPlayingCmd, []string{strings.Join(fields[1:], " ")}}, nil
+	case "nptext":
+		return cmd{NpTextCmd, fields[1:]}, nil
+	case "moo":
+		return cmd{MooCmd, []string{}}, nil
+	case "itemdrops":
+		return cmd{DropsCmd, []string{s[10:]}}, nil
+	case "dmtoggle":
+		return cmd{DMCmd, []string{}}, nil
+	case "fsToggle":
+		return cmd{ToggleFSInfoCmd, []string{}}, nil
+	case "fs":
+		return cmd{FSCmd, fields[1:]}, nil
+	case "stream":
+		return cmd{StreamCmd, fields[1:]}, nil
+	case "hr":
+		fallthrough
+	case "cars":
+		fallthrough
+	case "speed":
+		fallthrough
+	case "distance":
+		return cmd{MetricsCmd, fields}, nil
+	case "raidincoming":
+		return cmd{RaidAlert, []string{}}, nil
+	case "steam":
+		return cmd{SteamCmd, []string{}}, nil
+	case "slots":
+		return cmd{GameCmd, fields}, nil
+	}
+	return cmdErr("Handler", CmdErrInvalidCommand)
 }
 
 func handleWrites(ctx context.Context, conn *net.Conn, wc chan string) {
@@ -876,13 +942,16 @@ func (g *Game) raidAlert() {
 }
 
 // start the stream
-func startStream() bool {
+// changed to start obs and stream... keeping for possible future use
+// for now obs should be running and the stream will be started through WS connection
+func startStreamFull() bool {
 	if obsCmd != nil {
 		log.Println("obs is already running")
 		return false
 	}
 	fmt.Println("attempting stream start")
 	cmd := exec.Command("obs", "--scene", "outdoors", "--startstreaming")
+	currentScene = "outdoors"
 	if err := cmd.Start(); err != nil {
 		log.Println(err)
 		return false
@@ -892,7 +961,44 @@ func startStream() bool {
 	return true
 }
 
-func stopStream() {
+func startStreamWS() bool {
+	if goobsClient == nil {
+		return false
+	}
+	params := stream.StartStreamParams{}
+	_, err := goobsClient.Stream.StartStream(&params)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func connectToOBSWS() error {
+	if goobsClient != nil {
+		return nil
+	}
+	var err error
+	goobsClient, err = goobs.New("localhost:4455", goobs.WithPassword(os.Getenv("OBSWS_PW")))
+	if err != nil {
+		log.Println("Couldn't connect to OBSWS - ", err.Error())
+		speech.Speak("couldn't conntect to OBSWS...", true, false)
+	}
+	return nil
+}
+
+func stopStreamWS() bool {
+	if goobsClient == nil {
+		return false
+	}
+	_, err := goobsClient.Stream.StopStream(&stream.StopStreamParams{})
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+// keeping here for now
+func stopStreamOld() {
 	if obsCmd == nil {
 		return
 	}
@@ -911,6 +1017,7 @@ func goProConnected(w http.ResponseWriter, r *http.Request) {
 		params := scenes.NewSetCurrentProgramSceneParams().
 			WithSceneName("outdoors")
 		goobsClient.Scenes.SetCurrentProgramScene(params)
+		currentScene = "outdoors"
 	}
 	if streamHealthCancelFunc != nil {
 		// if we already have a health check running and
@@ -941,9 +1048,14 @@ func goProDisconnected(w http.ResponseWriter, r *http.Request) {
 	speech.Speak("Go pro disconnected", true, false)
 	if streamHealthCancelFunc != nil {
 		// Clean up any stream health checks
+		newScene := noSignalScene
+		if hasLiveBirds {
+			newScene = noSignalSceneLiveBirds
+		}
 		params := scenes.NewSetCurrentProgramSceneParams().
-			WithSceneName("no_signal")
+			WithSceneName(newScene)
 		goobsClient.Scenes.SetCurrentProgramScene(params)
+		currentScene = newScene
 		streamHealthCancelFunc()
 	}
 	fmt.Fprintf(w, "go it\n")
@@ -991,7 +1103,66 @@ func checkGoProStreamHealth() {
 			}
 			fmt.Printf("Outdoor bitrate: %d\n", app.BitRate)
 		}
+
+		if app.Name == "live" {
+			if hasLiveBirds && app.BitRate < 1000000 {
+				// if bitrate is lower than this, then the camera is not
+				// in live view
+				fmt.Println("lost live bird cam")
+				hasLiveBirds = false
+				switch currentScene {
+				case "no_signal_live_birds":
+					setOBSScene("no_signal")
+				case "brb_live_birds":
+					setOBSScene("birb")
+				}
+			}
+
+			if !hasLiveBirds && app.BitRate >= 1000000 {
+				// live bird feed is back
+				fmt.Println("live birds are back")
+				hasLiveBirds = true
+				switch currentScene {
+				case "no_signal":
+					setOBSScene("no_signal_live_birds")
+				case "birb":
+					setOBSScene("brb_live_birds")
+				}
+			}
+		}
 	}
+}
+
+func setLiveBirdCamVisibility(visible bool) {
+	// set the live bird cam visibility
+	// based on if we have it or not,
+	// so we can see the bird video
+
+	// maybe we just set another scene with live bird for now
+
+}
+
+func setOBSScene(sceneName string) {
+	if goobsClient == nil {
+		connectToOBSWS()
+	}
+	// check to see if we have live birds if setting certain scenes
+	if hasLiveBirds {
+		switch sceneName {
+		case "no_signal":
+			sceneName = noSignalSceneLiveBirds
+		case "birb":
+			sceneName = brbSceneLiveBirds
+		}
+	}
+	params := scenes.NewSetCurrentProgramSceneParams().
+		WithSceneName(sceneName)
+	_, err := goobsClient.Scenes.SetCurrentProgramScene(params)
+	if err != nil {
+		fmt.Println("Error switch scene: ", err)
+		return
+	}
+	currentScene = sceneName
 }
 
 func flipStreamCamera() {

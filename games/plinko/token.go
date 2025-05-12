@@ -11,12 +11,16 @@ import (
 )
 
 const (
-	tokenMass = 5
+	tokenMass        = 5
+	typeNormal       = 0x00
+	typeSuper        = 0x01
+	typeSecondChance = 0x02
 )
 
 type token struct {
 	falling     bool
 	mass        int
+	tokenType   int
 	x           float64
 	y           float64
 	vx          float64
@@ -30,7 +34,8 @@ type token struct {
 	Value       *big.Int
 }
 
-func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value *big.Int) *token {
+// TODO: Update to specify a special token type to make and set the shader accordingly
+func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, value *big.Int, tokenType int) *token {
 	radius := float64(img.Width) / 2.0
 	labelOffset := fPoint{2.0 * radius, 0}
 	color, err := colorHexStrToColor(playerColor)
@@ -39,9 +44,13 @@ func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, valu
 		color = rl.Blue
 	}
 	shader := rl.GetShaderDefault()
-	if value.Cmp(big.NewInt(1)) == 1 {
+	switch tokenType {
+	case typeSuper:
 		shader = shaders.Get("cosmic")
 		shaders.SetOffsets("cosmic", img.Width, img.Height)
+	case typeSecondChance:
+		shader = shaders.Get("secondChance")
+		shaders.SetOffsets("secondChance", img.Width, img.Height)
 	}
 
 	//TODO: Set shader based on token created (super, second chance etc.)
@@ -50,7 +59,7 @@ func NewToken(playerName, playerColor string, img rl.Texture2D, pos fPoint, valu
 		x:           pos.x,
 		y:           pos.y,
 		img:         img,
-		tokenType:   typeNormal,
+		tokenType:   tokenType,
 		radius:      radius,
 		playerName:  playerName,
 		playerColor: color,
